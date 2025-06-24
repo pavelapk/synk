@@ -4,7 +4,7 @@ application-id = "com.tap.synk"
 application-namespace = "com.tap.synk"
 version-name = "0.38"
 
-java-compiler-version = "18"
+java-compiler-version = "19"
 java-bytecode-version = "11"
 
 android-build-tools-plugin = "8.0.0"
