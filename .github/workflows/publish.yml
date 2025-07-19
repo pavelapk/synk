@@ -20,3 +20,5 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_githubPackagesUsername: ${{ secrets.GH_PACKAGES_USER_NAME }}
           ORG_GRADLE_PROJECT_githubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
+          ORG_GRADLE_PROJECT_ghPackagesReadUser: ${{ secrets.GH_PACKAGES_USER_NAME }}
+          ORG_GRADLE_PROJECT_ghPackagesReadPassword: ${{ secrets.GH_PACKAGES_READ_PASSWORD }}

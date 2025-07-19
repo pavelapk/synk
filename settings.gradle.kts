@@ -14,8 +14,14 @@ plugins {
     id("com.gradle.enterprise") version ("3.19.2")
 }
 
-val localProperties = Properties().apply {
-    load(file("local.properties").inputStream())
+val localProperties = Properties()
+val localPropertiesFile = file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+
+fun getProperty(key: String): String? {
+    return System.getenv("ORG_GRADLE_PROJECT_$key") ?: localProperties.getProperty(key)
 }
 
 dependencyResolutionManagement {
@@ -26,8 +32,8 @@ dependencyResolutionManagement {
             name = "gitHubPackages"
             url = uri("https://maven.pkg.github.com/pavelapk/hlc")
             credentials {
-                username = localProperties.getProperty("ghPackagesReadUser")
-                password = localProperties.getProperty("ghPackagesReadPassword")
+                username = getProperty("ghPackagesReadUser")
+                password = getProperty("ghPackagesReadPassword")
             }
         }
     }
