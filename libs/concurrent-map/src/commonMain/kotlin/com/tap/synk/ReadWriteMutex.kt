@@ -5,7 +5,6 @@ import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.SelectClause2
 import kotlinx.coroutines.sync.Mutex
-import javax.naming.OperationNotSupportedException
 
 interface ReadWriteMutex {
     val read: Mutex
@@ -106,7 +105,7 @@ internal sealed class AbstractReadOrWriteMutex(
         replaceWith = ReplaceWith(""),
     )
     override val onLock: SelectClause2<Any?, Mutex>
-        get() = throw OperationNotSupportedException("")
+        get() = throw UnsupportedOperationException("")
 
     override fun toString(): String {
         val lockState = if (isLocked) "locked" else "unlocked"

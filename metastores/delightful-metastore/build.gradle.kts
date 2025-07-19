@@ -6,10 +6,28 @@ plugins {
     alias(libs.plugins.android.lib)
     alias(libs.plugins.sqldelight)
     id("kotlinter-conventions")
-    id("maven-publish")
+    alias(libs.plugins.maven.publish)
 }
-group = "com.tap.delight.metastore"
+group = "com.tap"
 version = libs.versions.version.name.get()
+
+publishing {
+    repositories {
+        maven {
+            name = "githubPackages"
+            url = uri("https://maven.pkg.github.com/pavelapk/synk")
+            credentials(PasswordCredentials::class)
+        }
+    }
+}
+
+mavenPublishing {
+    coordinates(
+        groupId = group.toString(),
+        artifactId = "delight.metastore",
+        version = version.toString(),
+    )
+}
 
 sqldelight {
     databases {
@@ -26,7 +44,7 @@ kotlin {
 
     iosX64()
     iosArm64()
-    iosSimulatorArm64()
+//    iosSimulatorArm64() // because of murmurhash
 
     sourceSets {
         commonMain {
@@ -36,7 +54,6 @@ kotlin {
                 implementation(libs.murmurhash)
                 implementation(libs.androidx.collections.kmp)
                 api(libs.sqldelight.runtime)
-
             }
         }
         jvmTest {

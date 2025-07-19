@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.symbol.processing)
     id("kotlinter-conventions")
-    id("maven-publish")
+    alias(libs.plugins.maven.publish)
 }
 
 ksp {
@@ -14,22 +14,29 @@ ksp {
 }
 
 publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            groupId = "com.tap.synk.plugins"
-            artifactId = "adapter-codegen"
-            version = libs.versions.version.name.get()
-
-            from(components["java"])
+    repositories {
+        maven {
+            name = "githubPackages"
+            url = uri("https://maven.pkg.github.com/pavelapk/synk")
+            credentials(PasswordCredentials::class)
         }
     }
 }
 
+mavenPublishing {
+    coordinates(
+        groupId = "com.tap.synk.plugins",
+        artifactId = "adapter-codegen",
+        version = libs.versions.version.name.get()
+    )
+}
+
 dependencies {
+    compileOnly(libs.kotlin.symbol.processing.api)
+
     implementation(projects.synk)
     implementation(libs.kotlin.poet.core)
     implementation(libs.kotlin.poet.ksp)
-    implementation(libs.kotlin.symbol.processing.api)
     implementation(libs.autoservice.annotations)
 
     testImplementation(libs.junit)

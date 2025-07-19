@@ -10,8 +10,26 @@ plugins {
     alias(libs.plugins.maven.publish)
 }
 
-group = "com.tap.synk"
+group = "com.tap"
 version = libs.versions.version.name.get()
+
+publishing {
+    repositories {
+        maven {
+            name = "githubPackages"
+            url = uri("https://maven.pkg.github.com/pavelapk/synk")
+            credentials(PasswordCredentials::class)
+        }
+    }
+}
+
+mavenPublishing {
+    coordinates(
+        groupId = group.toString(),
+        artifactId = "synk",
+        version = version.toString(),
+    )
+}
 
 kotlin {
 
@@ -54,12 +72,6 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation(libs.okio.fakefilesystem)
                 implementation(libs.faker)
-            }
-        }
-
-        jvmMain {
-            dependencies {
-
             }
         }
     }

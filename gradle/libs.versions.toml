@@ -1,7 +1,5 @@
 [versions]
 
-application-id = "com.tap.synk"
-application-namespace = "com.tap.synk"
 version-name = "0.39"
 
 java-bytecode-version = "11"
@@ -39,8 +37,6 @@ murmurhash = "0.4.0"
 
 okhttp-logging-interceptor = "4.10.0"
 okio = "3.15.0"
-retrofit-core = "2.11.0"
-retrofit-serialization = "0.8.0"
 
 result = "1.1.16"
 sqldelight = "2.1.0"
@@ -51,11 +47,9 @@ maven-publish = "0.34.0"
 
 android = { id = "com.android.application", version.ref = "android-build-tools-plugin" }
 android-lib = { id = "com.android.library", version.ref = "android-build-tools-plugin" }
-android-test = { id = "com.android.test", version.ref = "android-build-tools-plugin" }
-dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
+
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-atomic-fu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }
@@ -90,18 +84,12 @@ kotlinx-atomic-fu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-serialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
-kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 
-logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 murmurhash = { module = "com.goncalossilva:murmurhash", version.ref = "murmurhash" }
 
-okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp-logging-interceptor" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
-retrofit-core = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit-core" }
-retrofit-serialization = { module = "com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter", version.ref = "retrofit-serialization" }
 
-result = { module = "com.michael-bull.kotlin-result:kotlin-result", version.ref = "result" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-coroutines = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
@@ -111,6 +99,4 @@ sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", versi
 gradle-versions-plugin = { module = "com.github.ben-manes:gradle-versions-plugin", version.ref = "versions-plugin" }
 kotlinter-plugin = { module = "org.jmailen.gradle:kotlinter-gradle", version.ref = "kotlinter" }
 
-
 [bundles]
-
