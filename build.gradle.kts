@@ -16,6 +16,6 @@ plugins {
 //    alias(libs.plugins.dependency.analysis)
 }
 
-tasks.register("clean",Delete::class){
+tasks.register("clean", Delete::class) {
     delete(rootProject.buildDir)
 }

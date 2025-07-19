@@ -2,10 +2,12 @@ package com.tap.synk.meta
 
 import com.tap.hlc.HybridLogicalClock
 import com.tap.hlc.Timestamp
-import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class MetaSemigroupTest {
 
     @Test

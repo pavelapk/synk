@@ -8,10 +8,12 @@ import com.tap.synk.fake.crdt
 import com.tap.synk.fake.faker
 import com.tap.synk.meta.meta
 import com.tap.synk.relay.Message
-import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class CompactTest {
 
     @Test

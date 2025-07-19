@@ -40,13 +40,6 @@ dependencies {
     ksp(libs.autoservice.ksp)
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(libs.versions.java.compiler.version.get().toInt()))
-        vendor.set(JvmVendorSpec.ADOPTIUM)
-    }
-}
-
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(libs.versions.java.bytecode.version.get().toInt())
 }

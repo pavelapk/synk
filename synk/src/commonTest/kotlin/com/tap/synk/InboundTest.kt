@@ -8,11 +8,13 @@ import com.tap.synk.ext.decodeToHashmap
 import com.tap.synk.ext.encodeToString
 import com.tap.synk.meta.Meta
 import com.tap.synk.relay.Message
-import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class InboundTest {
 
     @Test

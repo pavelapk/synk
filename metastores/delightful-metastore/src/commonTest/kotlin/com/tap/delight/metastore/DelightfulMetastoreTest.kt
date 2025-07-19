@@ -1,7 +1,6 @@
 package com.tap.delight.metastore
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import com.benasher44.uuid.Uuid
 import com.tap.delight.metastore.cache.DelightfulMemCache
 import com.tap.delight.metastore.hash.Hasher
 import com.tap.delight.metastore.schema.delightfulSchemaInitializer
@@ -9,7 +8,10 @@ import com.tap.synk.ext.encodeToString
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
+@OptIn(ExperimentalUuidApi::class)
 class DelightfulMetastoreTest {
 
     private val database by lazy {
@@ -33,7 +35,7 @@ class DelightfulMetastoreTest {
         val cache = DelightfulMemCache(100)
         val namespace = "test"
         val metastore = DelightfulMetastore(database, namespace, hasher, cache)
-        val id = Uuid.randomUUID().toString()
+        val id = Uuid.random().toString()
         val meta = HashMap<String, String>().apply {
             put("property", "value")
             put("property1", "value2")
@@ -53,7 +55,7 @@ class DelightfulMetastoreTest {
 
     @Test
     fun `getting data from the metastore can retrieve from database`() {
-        val id = Uuid.randomUUID().toString()
+        val id = Uuid.random().toString()
         val namespace = "test"
         val meta = HashMap<String, String>().apply {
             put("property", "value")
@@ -83,7 +85,7 @@ class DelightfulMetastoreTest {
 
     @Test
     fun `getting data from the metastore can retrieve from the cache`() {
-        val id = Uuid.randomUUID().toString()
+        val id = Uuid.random().toString()
         val namespace = "test"
         val meta = HashMap<String, String>().apply {
             put("property", "value")
@@ -130,7 +132,7 @@ class DelightfulMetastoreTest {
         val cache = DelightfulMemCache(100)
         val namespace = "test"
         val metastore = DelightfulMetastore(database, namespace, hasher, cache)
-        val id = Uuid.randomUUID().toString()
+        val id = Uuid.random().toString()
         val meta = HashMap<String, String>().apply {
             put("property", "value")
             put("property1", "value2")

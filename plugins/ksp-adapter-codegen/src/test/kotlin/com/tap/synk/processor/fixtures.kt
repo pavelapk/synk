@@ -6,7 +6,7 @@ internal val FOO_DATA_CLASS = SourceFile.kotlin(
     "Foo.kt",
     """
         package com.test.processor
-        
+
         data class Foo(
             private val bar: String,
             private val baz: Int?,
@@ -22,7 +22,7 @@ internal val FOO_NOT_IMPLEMENTED_ID_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver
     """,
@@ -35,7 +35,7 @@ internal val FOO_ID_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
@@ -49,7 +49,7 @@ internal val FOO_SEALED_CLASS = SourceFile.kotlin(
     "Foo.kt",
     """
         package com.test.processor
-        
+
         sealed interface Foo {
             data class Bar(
                 val bar: String,
@@ -72,14 +72,14 @@ internal val FOO_SEALED_ID_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
                 val id = when(crdt) {
                     is Foo.Bar -> crdt.bar
                     is Foo.Baz -> crdt.bam
-                } 
+                }
                 return id
             }
         }
@@ -91,9 +91,9 @@ internal val FOO_COLLECTION_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Foo(
-            private val bar: List<String>,
-            private val baz: String,
-            private val bim: Set<Boolean>,
+            val bar: List<String>,
+            val baz: String,
+            val bim: Set<Boolean>,
         )
     """,
 )
@@ -105,7 +105,7 @@ internal val FOO_COLLECTION_ID_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
@@ -120,8 +120,8 @@ internal val FOO_DATA_SUB_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Foo(
-            private val bar: Bar,
-            private val baz: String,
+            val bar: Bar,
+            val baz: String,
         )
     """,
 )
@@ -155,7 +155,7 @@ internal val FOO_BAR_SUB_CLASS_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
@@ -170,7 +170,7 @@ internal val FOO_COLLECTION_DATA_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Foo(
-            private val bar: List<Bar>,
+            val baz: List<Bar>,
         )
     """,
 )
@@ -180,7 +180,7 @@ internal val BAR_COLLECTION_DATA_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Bar(
-            private val bim: String,
+            val bim: String,
         )
     """,
 )
@@ -192,7 +192,7 @@ internal val FOO_COLLECTION_DATA_CLASS_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
@@ -215,14 +215,14 @@ internal val BAR_VALUE_CLASS_SERIALIZER = SourceFile.kotlin(
     "BarSerializer.kt",
     """
         package com.test.processor
-        
+
         import com.tap.synk.annotation.SynkSerializer
         import com.tap.synk.serialize.StringSerializer
 
         @SynkSerializer
         object BarSerializer: StringSerializer<Bar> {
             override fun serialize(serializable: Bar): String {
-                return serializable.test.toString() 
+                return serializable.test.toString()
             }
 
             override fun deserialize(serialized: String): Bar {
@@ -262,7 +262,7 @@ internal val FOO_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
-        
+
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {

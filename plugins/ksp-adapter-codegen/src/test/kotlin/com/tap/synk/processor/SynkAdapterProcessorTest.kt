@@ -529,10 +529,10 @@ internal class SynkAdapterProcessorTest {
 
     private fun compile(vararg source: SourceFile) = KotlinCompilation().apply {
         sources = source.toList()
-        symbolProcessorProviders = listOf(SynkAdapterProcessorProvider())
+        symbolProcessorProviders = mutableListOf(SynkAdapterProcessorProvider())
         workingDir = temporaryFolder.root
         inheritClassPath = true
-        verbose = false
+        verbose = true
     }.compile()
 
     private fun assertSourceEquals(

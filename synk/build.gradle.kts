@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
@@ -6,26 +7,23 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.atomic.fu)
     alias(libs.plugins.kotlinter)
-    id("maven-publish")
+    alias(libs.plugins.maven.publish)
 }
 
 group = "com.tap.synk"
 version = libs.versions.version.name.get()
 
-
 kotlin {
-
-    androidTarget()
-    jvm()
-
-    jvmToolchain {
-        languageVersion.set(JavaLanguageVersion.of(libs.versions.java.compiler.version.get().toInt()))
-        vendor.set(JvmVendorSpec.ADOPTIUM)
-    }
 
     androidTarget {
         publishLibraryVariants("release")
     }
+
+    jvm()
+
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
 
     targets.configureEach {
         compilations.configureEach {
@@ -47,7 +45,6 @@ kotlin {
                 implementation(libs.kotlinx.serialization)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.hlc)
-                implementation(libs.uuid)
                 api(libs.okio)
             }
         }
@@ -72,7 +69,7 @@ android {
 
     namespace = "com.tap.synk"
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
-
+    compileSdk = libs.versions.android.compile.sdk.get().toInt()
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(libs.versions.java.bytecode.version.get().toInt())
         targetCompatibility = JavaVersion.toVersion(libs.versions.java.bytecode.version.get().toInt())
@@ -92,7 +89,7 @@ android {
 
     androidComponents {
         beforeVariants { builder ->
-            if(builder.buildType == "debug") {
+            if (builder.buildType == "debug") {
                 builder.enable = false
             } else {
                 builder.enableUnitTest = false
@@ -103,5 +100,5 @@ android {
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions.jvmTarget = libs.versions.java.bytecode.version.get()
+    compilerOptions.jvmTarget = JvmTarget.fromTarget(libs.versions.java.bytecode.version.get())
 }

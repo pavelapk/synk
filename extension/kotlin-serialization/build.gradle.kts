@@ -13,10 +13,9 @@ kotlin {
 
     jvm()
 
-    jvmToolchain {
-        languageVersion.set(JavaLanguageVersion.of(libs.versions.java.compiler.version.get().toInt()))
-        vendor.set(JvmVendorSpec.ADOPTIUM)
-    }
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         commonMain {

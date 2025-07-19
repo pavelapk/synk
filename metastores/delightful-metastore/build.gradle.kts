@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
@@ -23,10 +24,9 @@ kotlin {
     jvm()
     androidTarget()
 
-    jvmToolchain {
-        languageVersion.set(JavaLanguageVersion.of(libs.versions.java.compiler.version.get().toInt()))
-        vendor.set(JvmVendorSpec.ADOPTIUM)
-    }
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         commonMain {
@@ -35,7 +35,6 @@ kotlin {
                 implementation(projects.libs.concurrentMap)
                 implementation(libs.murmurhash)
                 implementation(libs.androidx.collections.kmp)
-                implementation(libs.uuid)
                 api(libs.sqldelight.runtime)
 
             }
@@ -54,7 +53,7 @@ android {
 
     namespace = "com.tap.delight.metastore"
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
-
+    compileSdk = libs.versions.android.compile.sdk.get().toInt()
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(libs.versions.java.bytecode.version.get().toInt())
         targetCompatibility = JavaVersion.toVersion(libs.versions.java.bytecode.version.get().toInt())
@@ -68,7 +67,7 @@ android {
 
     androidComponents {
         beforeVariants { builder ->
-            if(builder.buildType == "debug") {
+            if (builder.buildType == "debug") {
                 builder.enable = false
             } else {
                 builder.enableUnitTest = false
@@ -79,5 +78,5 @@ android {
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions.jvmTarget = libs.versions.java.bytecode.version.get()
+    compilerOptions.jvmTarget = JvmTarget.fromTarget(libs.versions.java.bytecode.version.get())
 }

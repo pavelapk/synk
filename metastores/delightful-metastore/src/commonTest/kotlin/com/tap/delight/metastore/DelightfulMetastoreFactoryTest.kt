@@ -1,7 +1,6 @@
 package com.tap.delight.metastore
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import com.benasher44.uuid.Uuid
 import com.tap.delight.metastore.cache.DelightfulMemCache
 import com.tap.delight.metastore.config.MetastoreConfig
 import com.tap.delight.metastore.hash.MurmurHasher
@@ -9,7 +8,10 @@ import com.tap.delight.metastore.schema.delightfulSchemaInitializer
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
+@OptIn(ExperimentalUuidApi::class)
 class DelightfulMetastoreFactoryTest {
 
     private class CRDT
@@ -30,7 +32,7 @@ class DelightfulMetastoreFactoryTest {
     private fun seedDatabase(range: IntRange, namespace: String) {
         for (i in range) {
             database.multistoreQueries.upsert(
-                Uuid.randomUUID().toString(),
+                Uuid.random().toString(),
                 namespace,
                 "",
             )

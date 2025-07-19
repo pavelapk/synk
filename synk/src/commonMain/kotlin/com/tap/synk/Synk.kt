@@ -17,7 +17,10 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.IO
 
+@OptIn(FlowPreview::class)
 class Synk internal constructor(
     val clockStorageConfiguration: ClockStorageConfiguration,
     val factory: MetaStoreFactory = InMemoryMetaStoreFactory(),

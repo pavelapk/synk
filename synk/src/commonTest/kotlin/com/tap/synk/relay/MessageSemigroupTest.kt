@@ -6,10 +6,12 @@ import com.tap.synk.CRDT
 import com.tap.synk.CRDTAdapter
 import com.tap.synk.adapter.store.SynkAdapterStore
 import com.tap.synk.meta.Meta
-import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class MessageSemigroupTest {
 
     @Test

@@ -27,7 +27,7 @@ class DelightfulMetastore internal constructor(
     }
 
     private fun putMetaInDatabase(id: String, namespace: String, data: String) {
-        return database.multistoreQueries.upsert(id, namespace, data)
+        database.multistoreQueries.upsert(id, namespace, data)
     }
 
     private fun putMetaInCache(id: String, namespace: String, data: String) {

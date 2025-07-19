@@ -1,4 +1,4 @@
-import com.android.build.api.dsl.SettingsExtension
+import java.util.Properties
 
 pluginManagement {
     repositories {
@@ -11,31 +11,25 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.enterprise") version ("3.13.4")
-    id("com.android.settings")  version("8.0.0")
+    id("com.gradle.enterprise") version ("3.19.2")
 }
 
-configure<SettingsExtension> {
-    compileSdk = 32
-    minSdk = 24
-}
-
-gradleEnterprise {
-    buildScan {
-        termsOfServiceUrl = "https://gradle.com/terms-of-service"
-        termsOfServiceAgree = "yes"
-
-        publishAlwaysIf(!System.getenv("GITHUB_ACTIONS").isNullOrEmpty())
-    }
+val localProperties = Properties().apply {
+    load(file("local.properties").inputStream())
 }
 
 dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        mavenLocal()
-        maven(url = "https://jitpack.io" )
-
+        maven {
+            name = "gitHubPackages"
+            url = uri("https://maven.pkg.github.com/pavelapk/hlc")
+            credentials {
+                username = localProperties.getProperty("ghPackagesReadUser")
+                password = localProperties.getProperty("ghPackagesReadPassword")
+            }
+        }
     }
 }
 
