@@ -24,7 +24,7 @@ junit = "4.13.2"
 kotlin = "2.1.21"
 kpoet = "2.2.0"
 ksp = "2.1.21-2.0.1"
-kotlinter = "3.15.0"
+kotlinter = "5.1.1"
 kot-compile-testing = "0.8.0"
 
 kotlinx-atomic-fu = "0.27.0"

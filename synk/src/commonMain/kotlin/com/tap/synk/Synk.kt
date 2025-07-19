@@ -54,11 +54,13 @@ class Synk internal constructor(
 
         inline fun <reified T : Any> registerSynkAdapter(synkAdapter: SynkAdapter<T>) = apply {
             val clazz = T::class
-            if (clazz.isSealed) {
-                clazz.sealedSubclasses.forEach { sealedClazz ->
-                    synkAdapterStore.register(sealedClazz as KClass<T>, synkAdapter)
-                }
-            }
+
+// TODO Disabled for now, as sealed classes reflection are not supported in Kotlin Multiplatform
+//            if (clazz.isSealed) {
+//                clazz.sealedSubclasses.forEach { sealedClazz ->
+//                    synkAdapterStore.register(sealedClazz as KClass<T>, synkAdapter)
+//                }
+//            }
 
             synkAdapterStore.register(clazz, synkAdapter)
         }
