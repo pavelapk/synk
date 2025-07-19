@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.android.lib)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.atomic.fu)
-    alias(libs.plugins.kotlinter)
+//    alias(libs.plugins.kotlinter)
     alias(libs.plugins.maven.publish)
 }
 

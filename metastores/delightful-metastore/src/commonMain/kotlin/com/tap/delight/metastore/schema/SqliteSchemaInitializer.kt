@@ -22,7 +22,7 @@ class SqliteSchemaInitializer(
 
         private fun setSchemaVersion(driver: SqlDriver, version: Long) {
             kotlin.runCatching {
-                driver.execute(null, String.format("PRAGMA user_version = %d;", version), 0, null)
+                driver.execute(null, "PRAGMA user_version = $version;", 0, null)
             }
         }
 

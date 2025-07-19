@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.symbol.processing)
-    id("kotlinter-conventions")
+//    id("kotlinter-conventions")
     alias(libs.plugins.maven.publish)
 }
 

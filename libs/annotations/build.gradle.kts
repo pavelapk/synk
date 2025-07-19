@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.atomic.fu)
-    id("kotlinter-conventions")
+//    id("kotlinter-conventions")
     alias(libs.plugins.maven.publish)
 }
 group = "com.tap.synk.lib"

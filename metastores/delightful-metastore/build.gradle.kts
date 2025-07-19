@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.lib)
     alias(libs.plugins.sqldelight)
-    id("kotlinter-conventions")
+//    id("kotlinter-conventions")
     alias(libs.plugins.maven.publish)
 }
 group = "com.tap"
