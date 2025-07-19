@@ -39,8 +39,7 @@ kotlin {
 
             }
         }
-
-        commonTest {
+        jvmTest {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.sqldelight.jvm.driver)
