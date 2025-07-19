@@ -10,6 +10,24 @@ plugins {
 group = "com.tap.synk.lib"
 version = libs.versions.version.name.get()
 
+publishing {
+    repositories {
+        maven {
+            name = "githubPackages"
+            url = uri("https://maven.pkg.github.com/pavelapk/synk")
+            credentials(PasswordCredentials::class)
+        }
+    }
+}
+
+mavenPublishing {
+    coordinates(
+        groupId = group.toString(),
+        artifactId = "concurrent-map",
+        version = version.toString(),
+    )
+}
+
 kotlin {
 
     jvm()

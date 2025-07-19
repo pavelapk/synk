@@ -24,7 +24,7 @@ publishing {
 mavenPublishing {
     coordinates(
         groupId = group.toString(),
-        artifactId = "delight.metastore",
+        artifactId = "delightful-metastore",
         version = version.toString(),
     )
 }
