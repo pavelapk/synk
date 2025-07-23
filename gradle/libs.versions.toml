@@ -5,32 +5,32 @@ version-name = "0.39.1"
 java-bytecode-version = "11"
 android-compile-sdk = "35"
 
-android-build-tools-plugin = "8.9.3"
+android-build-tools-plugin = "8.11.1"
 versions-plugin = "0.47.0"
 
 androidx-collection = "1.5.0"
 
 autoservice-annotations = "1.1.1"
-autoservice-ksp = "1.1.0"
+autoservice-ksp = "1.2.0"
 
 dependency-analysis = "1.18.0"
 
-faker = "1.14.0"
+faker = "1.16.0"
 
 hlc = "1.2.0"
 
 junit = "4.13.2"
 
-kotlin = "2.1.21"
+kotlin = "2.2.0"
 kpoet = "2.2.0"
-ksp = "2.1.21-2.0.1"
+ksp = "2.2.0-2.0.2"
 kotlinter = "5.1.1"
 kot-compile-testing = "0.8.0"
 
-kotlinx-atomic-fu = "0.27.0"
-kotlinx-coroutines = "1.10.1"
-kotlinx-datetime = "0.6.2"
-kotlinx-serialization = "1.8.1"
+kotlinx-atomic-fu = "0.29.0"
+kotlinx-coroutines = "1.10.2"
+kotlinx-datetime = "0.7.1"
+kotlinx-serialization = "1.9.0"
 
 logback = "1.5.16"
 murmurhash = "0.4.0"

@@ -43,14 +43,11 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
-    targets.configureEach {
-        compilations.configureEach {
-            kotlinOptions {
-                allWarningsAsErrors = false
-                freeCompilerArgs += listOf("-Xcontext-receivers")
-            }
-        }
+    compilerOptions {
+//        allWarningsAsErrors.set(false)
+        freeCompilerArgs.addAll("-Xcontext-receivers")
     }
+
 
     sourceSets {
         commonMain {
