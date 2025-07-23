@@ -3,14 +3,15 @@ package com.tap.synk.processor
 import com.tschuchort.compiletesting.CompilationResult
 import com.tschuchort.compiletesting.KotlinCompilation
 import com.tschuchort.compiletesting.SourceFile
-import com.tschuchort.compiletesting.symbolProcessorProviders
-import org.intellij.lang.annotations.Language
-import org.junit.Rule
-import org.junit.Test
-import org.junit.rules.TemporaryFolder
+import com.tschuchort.compiletesting.configureKsp
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.intellij.lang.annotations.Language
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 internal class SynkAdapterProcessorTest {
 
@@ -24,7 +25,7 @@ internal class SynkAdapterProcessorTest {
 
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, compilationResult.exitCode)
         val expectedMessage = "@SynkAdapter annotated class must implement IDResolver interface"
-        assertTrue("Expected message containing text $expectedMessage but got: ${compilationResult.messages}") {
+        assertTrue("Expected message containing text '$expectedMessage'") {
             compilationResult.messages.contains(expectedMessage)
         }
     }
@@ -46,7 +47,9 @@ internal class SynkAdapterProcessorTest {
                 public class FooSynkAdapter(
                     private val idResolver: IDResolver<Foo> = FooResolver(),
                     private val mapEncoder: MapEncoder<Foo> = FooMapEncoder(),
-                ) : SynkAdapter<Foo>, IDResolver<Foo> by idResolver, MapEncoder<Foo> by mapEncoder
+                ) : SynkAdapter<Foo>,
+                    IDResolver<Foo> by idResolver,
+                    MapEncoder<Foo> by mapEncoder
             """.trimIndent(),
             compilationResult.sourceFor("FooSynkAdapter.kt"),
         )
@@ -100,7 +103,9 @@ internal class SynkAdapterProcessorTest {
                 public class FooSynkAdapter(
                     private val idResolver: IDResolver<Foo> = FooResolver(),
                     private val mapEncoder: MapEncoder<Foo> = FooMapEncoder(),
-                ) : SynkAdapter<Foo>, IDResolver<Foo> by idResolver, MapEncoder<Foo> by mapEncoder
+                ) : SynkAdapter<Foo>,
+                    IDResolver<Foo> by idResolver,
+                    MapEncoder<Foo> by mapEncoder
             """.trimIndent(),
             compilationResult.sourceFor("FooSynkAdapter.kt"),
         )
@@ -227,7 +232,9 @@ internal class SynkAdapterProcessorTest {
                 public class FooSynkAdapter(
                     private val idResolver: IDResolver<Foo> = FooResolver(),
                     private val mapEncoder: MapEncoder<Foo> = FooMapEncoder(),
-                ) : SynkAdapter<Foo>, IDResolver<Foo> by idResolver, MapEncoder<Foo> by mapEncoder
+                ) : SynkAdapter<Foo>,
+                    IDResolver<Foo> by idResolver,
+                    MapEncoder<Foo> by mapEncoder
             """.trimIndent(),
             compilationResult.sourceFor("FooSynkAdapter.kt"),
         )
@@ -249,10 +256,10 @@ internal class SynkAdapterProcessorTest {
                 import kotlin.collections.Set
 
                 public class FooMapEncoder(
-                    private val barListEncoderString: MapEncoder<List<String>> =
-                            ListEncoder<String>("bar", StringEncoder),
-                    private val bimSetEncoderBoolean: MapEncoder<Set<Boolean>> =
-                            SetEncoder<Boolean>("bim", BooleanEncoder),
+                    private val barListEncoderString:
+                            MapEncoder<List<String>> = ListEncoder<String>("bar", StringEncoder),
+                    private val bimSetEncoderBoolean:
+                            MapEncoder<Set<Boolean>> = SetEncoder<Boolean>("bim", BooleanEncoder),
                 ) : MapEncoder<Foo> {
                     override fun encode(crdt: Foo): Map<String, String> {
                         val map = mutableMapOf<String, String>()
@@ -291,7 +298,9 @@ internal class SynkAdapterProcessorTest {
                 public class FooSynkAdapter(
                     private val idResolver: IDResolver<Foo> = FooResolver(),
                     private val mapEncoder: MapEncoder<Foo> = FooMapEncoder(),
-                ) : SynkAdapter<Foo>, IDResolver<Foo> by idResolver, MapEncoder<Foo> by mapEncoder
+                ) : SynkAdapter<Foo>,
+                    IDResolver<Foo> by idResolver,
+                    MapEncoder<Foo> by mapEncoder
             """.trimIndent(),
             compilationResult.sourceFor("FooSynkAdapter.kt"),
         )
@@ -404,7 +413,9 @@ internal class SynkAdapterProcessorTest {
                 public class FooSynkAdapter(
                     private val idResolver: IDResolver<Foo> = FooResolver(),
                     private val mapEncoder: MapEncoder<Foo> = FooMapEncoder(),
-                ) : SynkAdapter<Foo>, IDResolver<Foo> by idResolver, MapEncoder<Foo> by mapEncoder
+                ) : SynkAdapter<Foo>,
+                    IDResolver<Foo> by idResolver,
+                    MapEncoder<Foo> by mapEncoder
             """.trimIndent(),
             compilationResult.sourceFor("FooSynkAdapter.kt"),
         )
@@ -484,7 +495,9 @@ internal class SynkAdapterProcessorTest {
                 public class FooSynkAdapter(
                     private val idResolver: IDResolver<Foo> = FooResolver(),
                     private val mapEncoder: MapEncoder<Foo> = FooMapEncoder(),
-                ) : SynkAdapter<Foo>, IDResolver<Foo> by idResolver, MapEncoder<Foo> by mapEncoder
+                ) : SynkAdapter<Foo>,
+                    IDResolver<Foo> by idResolver,
+                    MapEncoder<Foo> by mapEncoder
             """.trimIndent(),
             compilationResult.sourceFor("FooSynkAdapter.kt"),
         )
@@ -529,7 +542,12 @@ internal class SynkAdapterProcessorTest {
 
     private fun compile(vararg source: SourceFile) = KotlinCompilation().apply {
         sources = source.toList()
-        symbolProcessorProviders = mutableListOf(SynkAdapterProcessorProvider())
+        jvmTarget = "11"
+        configureKsp(useKsp2 = true) {
+            symbolProcessorProviders.add(SynkAdapterProcessorProvider())
+            allWarningsAsErrors = true
+            loggingLevels = CompilerMessageSeverity.VERBOSE
+        }
         workingDir = temporaryFolder.root
         inheritClassPath = true
         verbose = true
@@ -547,9 +565,10 @@ internal class SynkAdapterProcessorTest {
     }
 
     private fun CompilationResult.sourceFor(fileName: String): String {
-        return kspGeneratedSources().find { it.name == fileName }
+        val sources = kspGeneratedSources()
+        return sources.find { it.name == fileName }
             ?.readText()
-            ?: throw IllegalArgumentException("Could not find file $fileName in ${kspGeneratedSources()}")
+            ?: throw IllegalArgumentException("Could not find file $fileName in $sources")
     }
 
     private fun CompilationResult.kspGeneratedSources(): List<File> {

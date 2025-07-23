@@ -1,6 +1,7 @@
 package com.tap.synk.processor.context
 
 import com.google.devtools.ksp.innerArguments
+import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.ParameterizedTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -51,23 +52,23 @@ internal class SynkPoetTypes(
     }
 
     val idResolverTypeName by lazy {
-        symbols.idResolver.toClassName()
+        (symbols.idResolver.declaration as KSClassDeclaration).toClassName()
     }
 
     val mapEncoderTypeName by lazy {
-        symbols.mapEncoder.toClassName()
+        (symbols.mapEncoder.declaration as KSClassDeclaration).toClassName()
     }
 
     val synkAdapterTypeName by lazy {
-        symbols.synkAdapter.toClassName()
+        (symbols.synkAdapter.declaration as KSClassDeclaration).toClassName()
     }
 
     val stringSerializer by lazy {
-        symbols.stringSerializer.toClassName()
+        (symbols.stringSerializer.declaration as KSClassDeclaration).toClassName()
     }
 
     val enumSerializer by lazy {
-        symbols.enumStringSerializer.toClassName()
+        (symbols.enumStringSerializer.declaration as KSClassDeclaration).toClassName()
     }
 
     fun parameterizedMapEncoder(genericTypeName: TypeName): ParameterizedTypeName {
@@ -96,9 +97,11 @@ internal class SynkPoetTypes(
             symbols.setType.declaration -> {
                 setEncoderTypeName.parameterizedBy(type.innerArguments.first().toTypeName())
             }
+
             symbols.listType.declaration -> {
                 listEncoderTypeName.parameterizedBy(type.innerArguments.first().toTypeName())
             }
+
             else -> null
         }
     }

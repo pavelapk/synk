@@ -8,9 +8,9 @@ internal val FOO_DATA_CLASS = SourceFile.kotlin(
         package com.test.processor
 
         data class Foo(
-            private val bar: String,
-            private val baz: Int?,
-            private val bim: Boolean,
+            val bar: String,
+            val baz: Int?,
+            val bim: Boolean,
         )
     """,
 )
@@ -131,8 +131,8 @@ internal val FOO_BAR_SUB_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Bar(
-            private val bim: Bim?,
-            private val second: String,
+            val bim: Bim?,
+            val second: String,
         )
     """,
 )
@@ -142,8 +142,8 @@ internal val FOO_BIM_SUB_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Bim(
-            private val first: String,
-            private val second: String,
+            val first: String,
+            val second: String,
         )
     """,
 )
@@ -170,7 +170,7 @@ internal val FOO_COLLECTION_DATA_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Foo(
-            val baz: List<Bar>,
+            val bar: List<Bar>,
         )
     """,
 )
@@ -196,7 +196,7 @@ internal val FOO_COLLECTION_DATA_CLASS_RESOLVER = SourceFile.kotlin(
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
-                return crdt.baz
+                return crdt.bar.toString()
             }
         }
     """,
@@ -248,9 +248,9 @@ internal val FOO_VALUE_CLASS = SourceFile.kotlin(
     """
         package com.test.processor
         data class Foo(
-            private val bar: Bar,
-            private val barNull: Bar?,
-            private val baz: Baz,
+            val bar: Bar,
+            val barNull: Bar?,
+            val baz: Baz,
         )
     """,
 )
@@ -266,7 +266,7 @@ internal val FOO_RESOLVER = SourceFile.kotlin(
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
             override fun resolveId(crdt: Foo): String {
-                return crdt.baz
+                return crdt.toString()
             }
         }
     """,

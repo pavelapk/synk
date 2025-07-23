@@ -45,7 +45,7 @@ private fun deriveParameterizedCollectionParameter(
     val genericTypeName = parameter.innerTypeName
     // MapEncoder<List<T>> or MapEncoder<Set<T>>
     val genericMapEncoderTypeName = poetTypes.mapEncoderTypeName.parameterizedBy(
-        parameter.type.toClassName().parameterizedBy(genericTypeName),
+        parameter.type.toTypeName(),
     )
     val collectionEncoderVariableName = parameter.name + collectionEncoderTypeName.rawType.simpleNames.first() + genericType.declaration.simpleName.asString()
 
