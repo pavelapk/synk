@@ -211,6 +211,15 @@ internal val BAR_VALUE_CLASS = SourceFile.kotlin(
     """,
 )
 
+internal val BAR_VALUE_CLASS_GENERIC = SourceFile.kotlin(
+    "Bar.kt",
+    """
+        package com.test.processor
+        @JvmInline
+        value class Bar<T>(val test: Int)
+    """,
+)
+
 internal val BAR_VALUE_CLASS_SERIALIZER = SourceFile.kotlin(
     "BarSerializer.kt",
     """
@@ -226,6 +235,27 @@ internal val BAR_VALUE_CLASS_SERIALIZER = SourceFile.kotlin(
             }
 
             override fun deserialize(serialized: String): Bar {
+                return Bar(serialized.toInt())
+            }
+        }
+    """,
+)
+
+internal val BAR_VALUE_CLASS_GENERIC_SERIALIZER = SourceFile.kotlin(
+    "BarSerializer.kt",
+    """
+        package com.test.processor
+
+        import com.tap.synk.annotation.SynkSerializer
+        import com.tap.synk.serialize.StringSerializer
+
+        @SynkSerializer
+        class BarSerializer<T> : StringSerializer<Bar<T>> {
+            override fun serialize(serializable: Bar<T>): String {
+                return serializable.test.toString()
+            }
+
+            override fun deserialize(serialized: String): Bar<T> {
                 return Bar(serialized.toInt())
             }
         }
@@ -250,6 +280,18 @@ internal val FOO_VALUE_CLASS = SourceFile.kotlin(
         data class Foo(
             val bar: Bar,
             val barNull: Bar?,
+            val baz: Baz,
+        )
+    """,
+)
+
+internal val FOO_VALUE_CLASS_GENERIC = SourceFile.kotlin(
+    "Foo.kt",
+    """
+        package com.test.processor
+        data class Foo(
+            val bar: Bar<String>,
+            val barNull: Bar<String>?,
             val baz: Baz,
         )
     """,

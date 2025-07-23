@@ -1,6 +1,6 @@
 [versions]
 
-version-name = "0.40.0"
+version-name = "0.41.0"
 
 java-bytecode-version = "11"
 android-compile-sdk = "35"
@@ -32,13 +32,10 @@ kotlinx-coroutines = "1.10.2"
 kotlinx-datetime = "0.7.1"
 kotlinx-serialization = "1.9.0"
 
-logback = "1.5.16"
 murmurhash = "0.4.0"
 
-okhttp-logging-interceptor = "4.10.0"
 okio = "3.15.0"
 
-result = "1.1.16"
 sqldelight = "2.1.0"
 
 maven-publish = "0.34.0"

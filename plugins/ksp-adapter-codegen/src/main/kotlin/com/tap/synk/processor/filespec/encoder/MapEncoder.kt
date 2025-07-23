@@ -55,6 +55,12 @@ internal sealed interface EncoderParameter {
         val instantiateSerializer: Boolean = false,
     ) : EncoderParameter
 
+    data class CustomGenericSerializer(
+        val parameterName: String,
+        val serializerVariableName: String,
+        val parameterizedStringSerializer: ParameterizedTypeName,
+    ) : EncoderParameter
+
     data class EnumSerializer(
         val parameterName: String,
         val serializerVariableName: String,
@@ -68,6 +74,7 @@ internal sealed interface EncoderParameter {
         is SubEncoder -> customEncoderVariableName
         is CustomSerializer -> serializerVariableName
         is EnumSerializer -> serializerVariableName
+        is CustomGenericSerializer -> serializerVariableName
     }
 
     fun variableType(): TypeName = when (this) {
@@ -76,6 +83,7 @@ internal sealed interface EncoderParameter {
         is SubEncoder -> genericTypeName
         is CustomSerializer -> genericTypeName
         is EnumSerializer -> parameterizedStringSerializer
+        is CustomGenericSerializer -> parameterizedStringSerializer
     }
 }
 

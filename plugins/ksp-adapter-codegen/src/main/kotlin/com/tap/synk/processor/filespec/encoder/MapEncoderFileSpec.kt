@@ -107,22 +107,32 @@ private fun encoderParameters(paramEncoders: List<EncoderParameter>): List<Param
                     defaultValue(encoderDefaultType(encoderData))
                 }.build()
             }
+
             is EncoderParameter.CompositeSubEncoder -> {
                 ParameterSpec.builder(encoderData.variableName(), encoderData.variableType()).apply {
                     defaultValue(encoderDefaultType(encoderData))
                 }.build()
             }
+
             is EncoderParameter.SubEncoder -> {
                 ParameterSpec.builder(encoderData.variableName(), encoderData.variableType()).apply {
                     defaultValue(encoderDefaultType(encoderData))
                 }.build()
             }
+
             is EncoderParameter.CustomSerializer -> {
                 ParameterSpec.builder(encoderData.variableName(), encoderData.variableType()).apply {
                     defaultValue(encoderDefaultType(encoderData))
                 }.build()
             }
+
             is EncoderParameter.EnumSerializer -> {
+                ParameterSpec.builder(encoderData.variableName(), encoderData.variableType()).apply {
+                    defaultValue(encoderDefaultType(encoderData))
+                }.build()
+            }
+
+            is EncoderParameter.CustomGenericSerializer -> {
                 ParameterSpec.builder(encoderData.variableName(), encoderData.variableType()).apply {
                     defaultValue(encoderDefaultType(encoderData))
                 }.build()
@@ -197,6 +207,15 @@ private fun encoderDefaultType(paramEncoder: EncoderParameter.EnumSerializer): C
     }.build()
 }
 
+/**
+ * CustomStringSerializer<Foo>()
+ */
+private fun encoderDefaultType(paramEncoder: EncoderParameter.CustomGenericSerializer): CodeBlock {
+    return CodeBlock.builder().apply {
+        add("%T()", paramEncoder.parameterizedStringSerializer)
+    }.build()
+}
+
 private fun constructor(parameterSpecs: List<ParameterSpec>): FunSpec? {
     return if (parameterSpecs.isNotEmpty()) {
         FunSpec.constructorBuilder().apply {
@@ -235,6 +254,7 @@ private fun encoderFunCodeBlock(type: EncoderFunction.Type, encodeFunCodeBlock: 
                 is EncoderFunctionCodeBlock.Delegate -> encodeFunDelegateCodeBlock(encodeFunCodeBlock)
             }
         }
+
         EncoderFunction.Type.Decode -> {
             when (encodeFunCodeBlock) {
                 is EncoderFunctionCodeBlock.Standard -> decodeFunStandardCodeBlock(encodeFunCodeBlock)
@@ -354,11 +374,13 @@ private fun decodeFunStandardCodeBlock(encodeFunCodeBlock: EncoderFunctionCodeBl
                     }
                 }.build()
             }
+
             is EncoderFunctionCodeBlockStandardEncodable.NestedClass -> {
                 CodeBlock.builder().apply {
                     add("%L.decode(map.filter { it.key.contains(%S) }),\n", encodable.encoderVariableName, encodable.encodedKey + "|")
                 }.build()
             }
+
             is EncoderFunctionCodeBlockStandardEncodable.Serializable -> {
                 val target = CodeBlock.builder().apply {
                     add("map[%S]", encodable.encodedKey)

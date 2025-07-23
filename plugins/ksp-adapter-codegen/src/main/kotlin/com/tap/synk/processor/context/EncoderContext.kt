@@ -6,12 +6,10 @@ import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.tap.synk.processor.ext.asType
 import com.tap.synk.processor.ext.isEnum
-import com.tap.synk.processor.ext.isObject
 
 internal data class EncoderContext(
     private val processorContext: ProcessorContext,
@@ -43,13 +41,11 @@ internal data class EncoderContext(
     }
 
     val serializerMap by lazy {
-        serializers.fold(mutableMapOf<KSType, Pair<TypeName, Boolean>>()) { acc, serializerDeclaration ->
-
-            val requiresInstantiation = serializerDeclaration.isObject().not()
-
+        serializers.fold(mutableMapOf<KSClassDeclaration, KSClassDeclaration>()) { acc, serializerDeclaration ->
             acc.apply {
-                val genericType = serializerDeclaration.superTypes.first().resolve().innerArguments.first().type!!.resolve()
-                put(genericType, serializerDeclaration.asType().toClassName() to requiresInstantiation)
+                val superType = serializerDeclaration.superTypes.first().resolve()
+                val serializedType = superType.innerArguments.first().type!!.resolve()
+                put(serializedType.declaration as KSClassDeclaration, serializerDeclaration)
             }
         }
     }
@@ -68,7 +64,7 @@ internal data class EncoderContext(
         }
 
         val hasProvidedSerializer by lazy {
-            serializerMap.contains(type.makeNotNullable())
+            serializerMap.contains(type.makeNotNullable().declaration)
         }
 
         val isEnum by lazy {

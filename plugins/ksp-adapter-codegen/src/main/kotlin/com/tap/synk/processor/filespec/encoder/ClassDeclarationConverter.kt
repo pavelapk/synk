@@ -1,5 +1,6 @@
 package com.tap.synk.processor.filespec.encoder
 
+import com.google.devtools.ksp.innerArguments
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -8,6 +9,7 @@ import com.squareup.kotlinpoet.ksp.toTypeName
 import com.tap.synk.processor.context.EncoderContext
 import com.tap.synk.processor.ext.asType
 import com.tap.synk.processor.ext.decapitalise
+import com.tap.synk.processor.ext.isObject
 
 context(EncoderContext)
 internal fun mapEncoder(): MapEncoder {
@@ -76,19 +78,31 @@ private fun deriveSubEncoderParameter(parameter: EncoderContext.DerivedParameter
 }
 
 context(EncoderContext)
-private fun deriveSerializerParameter(parameter: EncoderContext.DerivedParameter): EncoderParameter.CustomSerializer {
+private fun deriveSerializerParameter(parameter: EncoderContext.DerivedParameter): EncoderParameter {
     val genericType = parameter.type.makeNotNullable()
-    val parameterizedStringSerializer = poetTypes.parameterizedStringSerializer(genericType.toTypeName())
+    val serializerDeclaration = serializerMap[genericType.declaration]!!
+    val requiresInstantiation = serializerDeclaration.isObject().not()
 
-    val (concreteType, requiresInstantiation) = serializerMap[genericType]!!
+    return if (serializerDeclaration.typeParameters.isNotEmpty()) {
+        val serializerTypeName = serializerDeclaration.toClassName()
+        val innerTypeNames = genericType.innerArguments.map { it.type!!.resolve().toTypeName() }.toTypedArray()
+        val parameterizedSerializer = serializerTypeName.parameterizedBy(*innerTypeNames)
 
-    return EncoderParameter.CustomSerializer(
-        parameter.name,
-        parameter.name + "Serializer",
-        parameterizedStringSerializer,
-        concreteType,
-        requiresInstantiation,
-    )
+        EncoderParameter.CustomGenericSerializer(
+            parameter.name,
+            parameter.name + "Serializer",
+            parameterizedSerializer,
+        )
+    } else {
+        val parameterizedStringSerializer = poetTypes.parameterizedStringSerializer(genericType.toTypeName())
+        EncoderParameter.CustomSerializer(
+            parameter.name,
+            parameter.name + "Serializer",
+            parameterizedStringSerializer,
+            serializerDeclaration.toClassName(),
+            requiresInstantiation,
+        )
+    }
 }
 
 context(EncoderContext)
@@ -166,7 +180,9 @@ context(EncoderContext)
 private fun deriveStandardEncodablePrimitive(parameter: EncoderContext.DerivedParameter): EncoderFunctionCodeBlockStandardEncodable.Primitive {
     val conversion = if (!symbols.isString(parameter.type)) {
         ".toString()"
-    } else { "" }
+    } else {
+        ""
+    }
     return EncoderFunctionCodeBlockStandardEncodable.Primitive(parameter.name, conversion, parameter.type.isMarkedNullable)
 }
 
@@ -234,7 +250,9 @@ private fun deriveDecodeFunction(): EncoderFunction {
                     if (param.type.isMarkedNullable) {
                         "?" + symbols.stringDecodeFunction(typeNotNull)
                     } else symbols.stringDecodeFunction(typeNotNull)
-                } else { "" }
+                } else {
+                    ""
+                }
                 EncoderFunctionCodeBlockStandardEncodable.Primitive(param.name, conversion, param.type.isMarkedNullable)
             }
         }
