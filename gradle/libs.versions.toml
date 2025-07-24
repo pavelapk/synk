@@ -1,6 +1,6 @@
 [versions]
 
-version-name = "0.41.0"
+version-name = "0.41.1"
 
 java-bytecode-version = "11"
 android-compile-sdk = "35"

@@ -33,7 +33,7 @@ internal data class AdapterContext(
     val idResolverClassName by lazy { classDeclaration.toClassName() }
 
     // FooMapEncoder
-    val mapEncoderClassName by lazy { ClassName(classDeclaration.packageName.asString(), crdtClassName + "MapEncoder") }
+    val mapEncoderClassName by lazy { ClassName(crdtType.declaration.packageName.asString(), crdtClassName + "MapEncoder") }
 
     // FooSynkAdapter
     val synkAdapterClassName by lazy { ClassName(classDeclaration.packageName.asString(), crdtClassName + "SynkAdapter") }

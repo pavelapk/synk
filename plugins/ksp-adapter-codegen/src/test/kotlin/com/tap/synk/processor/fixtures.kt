@@ -5,7 +5,7 @@ import com.tschuchort.compiletesting.SourceFile
 internal val FOO_DATA_CLASS = SourceFile.kotlin(
     "Foo.kt",
     """
-        package com.test.processor
+        package com.test.processor.db
 
         data class Foo(
             val bar: String,
@@ -35,6 +35,7 @@ internal val FOO_ID_RESOLVER = SourceFile.kotlin(
 
         import com.tap.synk.annotation.SynkAdapter
         import com.tap.synk.resolver.IDResolver
+        import com.test.processor.db.Foo
 
         @SynkAdapter
         class FooResolver : IDResolver<Foo> {
