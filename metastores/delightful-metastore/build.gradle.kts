@@ -44,7 +44,7 @@ kotlin {
 
     iosX64()
     iosArm64()
-//    iosSimulatorArm64() // because of murmurhash
+    iosSimulatorArm64()
 
     sourceSets {
         commonMain {
