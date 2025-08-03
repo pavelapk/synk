@@ -35,3 +35,6 @@ jobs:
 
       - name: Execute Gradle build
         run: ./gradlew build
+        env:
+          ORG_GRADLE_PROJECT_ghPackagesReadUser: ${{ secrets.GH_PACKAGES_USER_NAME }}
+          ORG_GRADLE_PROJECT_ghPackagesReadPassword: ${{ secrets.GH_PACKAGES_READ_PASSWORD }}
