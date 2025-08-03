@@ -4,11 +4,17 @@ import com.tap.synk.Synk
 import com.tap.synk.adapter.SynkAdapter
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.security.MessageDigest
+import okio.ByteString.Companion.encodeUtf8
+import okio.ByteString.Companion.toByteString
 import kotlin.math.ceil
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.random.Random
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+
+private fun sha256(bytes: ByteArray): ByteArray =
+    bytes.toByteString().sha256().toByteArray()
 
 /**
  * Configuration for ConflictSync. The current implementation supports a
@@ -125,10 +131,8 @@ class JoinDecomposer<T : Any>(private val adapter: SynkAdapter<T>) {
         return adapter.decode(map)
     }
 
-    fun hash(decomposition: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(decomposition.toByteArray()).joinToString("") { "%02x".format(it) }
-    }
+    fun hash(decomposition: String): String =
+        decomposition.encodeUtf8().sha256().hex()
 }
 
 /**
@@ -147,7 +151,6 @@ data class RatelessSymbol(
  * combining them to compute a symmetric difference.
  */
 class RatelessIBLT(private val elements: Set<String>) {
-    private val digest = MessageDigest.getInstance("SHA-256")
 
     fun generateSymbol(index: Int): RatelessSymbol {
         var idSum = ByteArray(32)
@@ -156,8 +159,8 @@ class RatelessIBLT(private val elements: Set<String>) {
 
         elements.forEach { element ->
             if (shouldInclude(element, index)) {
-                val elementBytes = element.toByteArray()
-                val elementHash = digest.digest(elementBytes)
+                val elementBytes = element.encodeToByteArray()
+                val elementHash = sha256(elementBytes)
                 for (i in elementBytes.indices.take(32)) {
                     idSum[i] = (idSum[i].toInt() xor elementBytes[i].toInt()).toByte()
                 }
@@ -198,11 +201,10 @@ class RatelessIBLT(private val elements: Set<String>) {
             val working = symbols.map { it.copy() }.toMutableList()
             val recovered = mutableSetOf<String>()
             var progress = true
-            val digest = MessageDigest.getInstance("SHA-256")
 
             fun remove(element: String) {
-                val bytes = element.toByteArray()
-                val hash = digest.digest(bytes)
+                val bytes = element.encodeToByteArray()
+                val hash = sha256(bytes)
                 working.forEach { symbol ->
                     for (i in bytes.indices.take(32)) {
                         symbol.idSum[i] = (symbol.idSum[i].toInt() xor bytes[i].toInt()).toByte()
@@ -220,8 +222,8 @@ class RatelessIBLT(private val elements: Set<String>) {
                 while (iterator.hasNext()) {
                     val sym = iterator.next()
                     if (sym.count == 1) {
-                        val element = String(sym.idSum).trimEnd('\u0000')
-                        val hash = digest.digest(element.toByteArray())
+                        val element = sym.idSum.decodeToString().trimEnd('\u0000')
+                        val hash = sha256(element.encodeToByteArray())
                         if (hash.contentEquals(sym.hashSum)) {
                             recovered.add(element)
                             remove(element)
@@ -389,13 +391,14 @@ class ConflictSyncSession<T : Any>(
 }
 
 /** Extensions to [Synk] to create sessions and serialise messages. */
+@OptIn(ExperimentalUuidApi::class)
 fun <T : Any> Synk.conflictSyncInitiate(
     state: T,
     config: ConflictSyncConfig = ConflictSyncConfig(),
 ): ConflictSyncSession<T> {
     val adapter = synkAdapterStore.resolve(state::class)
     @Suppress("UNCHECKED_CAST")
-    return ConflictSyncSession(java.util.UUID.randomUUID().toString(), adapter as SynkAdapter<T>, config)
+    return ConflictSyncSession(Uuid.random().toString(), adapter as SynkAdapter<T>, config)
 }
 
 fun ConflictSyncMessage.serialize(): String =
