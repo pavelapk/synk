@@ -14,6 +14,44 @@ import kotlin.test.assertTrue
 class OutboundTest {
 
     @Test
+    fun `calling recordChange then message returns a correctly formed Message`() {
+        val storageConfig = storageConfig()
+        val metaStoreMap = CMap<String, String>()
+        val currentHlc = HybridLogicalClock()
+        val synk = setupSynk(storageConfig, metaStoreMap, currentHlc)
+
+        val newCRDT = CRDT(
+            "123",
+            "Jim",
+            "Jones",
+            123344433,
+        )
+
+        synk.recordChange(newCRDT)
+        val expectedHLC = synk.hlc.value
+        val result = synk.message(newCRDT)
+
+        val expectedMetaMap = HashMap<String, String>().apply {
+            put("id", expectedHLC.toString())
+            put("name", expectedHLC.toString())
+            put("last_name", expectedHLC.toString())
+            put("phone", expectedHLC.toString())
+        }
+        val expectedMeta = Meta(
+            CRDT::class.qualifiedName.toString(),
+            expectedMetaMap,
+        )
+        val expectedMessage = Message(newCRDT, expectedMeta)
+
+        assertEquals(expectedMessage, result)
+        assertEquals(expectedHLC, synk.hlc.value)
+        assertTrue(expectedHLC > currentHlc)
+        assertEquals(expectedHLC.node.toString(), currentHlc.node.toString())
+        assertEquals(expectedMetaMap, metaStoreMap[newCRDT.id]?.decodeToHashmap())
+        assertTrue(storageConfig.fileSystem.exists(storageConfig.filePath / storageConfig.clockFileName))
+    }
+
+    @Test
     fun `calling outbound with old as null returns a correctly formed Message`() {
         val storageConfig = storageConfig()
         val metaStoreMap = CMap<String, String>()
