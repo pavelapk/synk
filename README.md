@@ -29,16 +29,19 @@ technology. What this means in practice is you can use whatever data persistence
 SQLDelight) and Synk can complement it by tracking extra metadata which is crucial for resolving conflicts.
 
 Synk behaves as a middle man between your local database and other databases in your application, for this reason
-it exposes two functions:
+it exposes functions to track and relay changes:
 
 ### Outbound
 
 ```kotlin
+Synk.recordChange(new: T, old: T? = null)
+Synk.message(crdt: T): Message<T>
 Synk.outbound(new: T, old: T? = null): Message<T>
 ```
 
-Whenever a new record/object is created or updated in your application locally, give synk the latest version and the old version (if applicable) and synk will return you a message.
-This message needs to be propagated to all other clients.
+Whenever a new record/object is created or updated in your application locally, call `recordChange` after persisting the change.
+When you're ready to transmit the update call `message` with the current value to obtain a payload.
+If you need to propagate immediately you can simply call `outbound`.
 
 ### Inbound
 
@@ -171,12 +174,13 @@ For more information on Synk adapters please visit the [documentation page](docs
 Synk resolves conflicts by recording a causal order of events in the Metastore. Calls to the `inbound` and `outbound`
 functions are checked against the current state of the Metastore and conflict resolution is performed.
 
-Local events are events that occur on the current node (client application), notify Synk of the event by passing the new
-and old (in the case of updates) to outbound once they have already been persisted to the database.
-
-Synk will return you a Message, it's your responsibility to ensure all nodes receive all messages relevant to them.
+Local events are events that occur on the current node (client application). Notify Synk of the event by passing the new
+and old (in the case of updates) to `recordChange` once they have already been persisted to the database.
+Later, call `message` to obtain the payload for transmission. `outbound` combines both steps when immediate propagation is required.
 
 ```kotlin
+Synk.recordChange(new: T, old: T? = null)
+Synk.message(crdt: T): Message<T>
 Synk.outbound(new: T, old: T? = null): Message<T>
 ```
 
