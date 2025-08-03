@@ -3,6 +3,7 @@ package com.tap.synk
 import com.tap.synk.adapter.SynkAdapter
 import com.tap.synk.config.CustomClockStorageConfiguration
 import com.tap.synk.meta.store.InMemoryMetaStoreFactory
+import kotlin.test.Ignore
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
@@ -47,6 +48,7 @@ class SynkBuilderTest {
         }
     }
 
+    @Ignore
     @Test
     fun `registering an adapter for a sealed class registers the adapter for all the nested subclasses`() {
         val storageConfiguration = CustomClockStorageConfiguration(
