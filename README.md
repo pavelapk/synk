@@ -207,7 +207,12 @@ Synk.serialize(messages: List<Message<T>>): String
 
 ```kotlin
 Synk.deserialize(encoded: String): List<Message<T>>
+Synk.deserialize(encoded: String): List<Message<Any>>
+Synk.deserializeOne(encoded: String): Message<Any>
 ```
+
+The dynamic overloads inspect the `meta.clazz` field for each message to resolve the correct adapter. Callers must register
+adapters for all CRDT types before using these functions.
 
 For those looking to serialize messages themselves, Synk exposes Message/Meta Serializers for popular libs:
 
