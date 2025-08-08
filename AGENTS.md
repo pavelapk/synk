@@ -1,2 +1,2 @@
-To run tests in :synk module use:
+To run "commonTest" tests in :synk module use:
 `./gradlew :synk:jvmTest`
