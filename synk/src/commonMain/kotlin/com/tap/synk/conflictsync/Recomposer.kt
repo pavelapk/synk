@@ -13,8 +13,8 @@ internal class Recomposer(
     private val adapters: SynkAdapterStore,
     private val metas: MetaStoreFactory,
 ) {
-    /** Group blocks by (namespace,id), rebuild CRDTs, install meta, and merge via inbound(). */
-    fun applyInbound(blocks: List<Block>) {
+    /** Group blocks by (namespace,id), rebuild CRDTs, and merge via inbound() with old if available. */
+    suspend fun applyInbound(blocks: List<Block>) {
         if (blocks.isEmpty()) return
 
         val groups = blocks.groupBy { it.key.namespace to it.key.id }
@@ -26,12 +26,14 @@ internal class Recomposer(
             val crdt = adapter.decode(crdtMap)
             val id = adapter.resolveId(crdt)
 
-            // Install meta before merging so inbound has correct clocks
-            metas.getStore(crdt::class).putMeta(id, metaMap)
+            // Load old if we can; if no StateSource is registered, treat as new
+            val old: Any? = try {
+                synk.stateSourceRegistry.resolve(namespace).byId(id)
+            } catch (_: Throwable) { null }
 
-            // Merge using existing merge semantics
+            // Merge using existing merge semantics (inbound updates meta store itself)
             val message = Message(crdt, Meta(crdt::class.qualifiedName ?: "", metaMap))
-            val merged = synk.inbound(message, old = null)
+            val merged = synk.inbound(message, old)
 
             // Allow host to persist merged CRDT if configured (type-specific)
             synk.onMergedRegistry.resolve(namespace)?.invoke(namespace, merged)

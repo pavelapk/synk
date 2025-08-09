@@ -28,7 +28,7 @@ class DecomposeRecomposeTest {
 
         val ns = CRDT::class.qualifiedName!!
         val blocks = decomposer.decompose(ns, CRDT::class, obj)
-        recomposer.applyInbound(blocks)
+        kotlinx.coroutines.runBlocking { recomposer.applyInbound(blocks) }
 
         assertEquals(1, merged.size)
         assertEquals(obj, merged.first())

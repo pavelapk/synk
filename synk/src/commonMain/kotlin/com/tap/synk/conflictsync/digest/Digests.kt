@@ -32,10 +32,10 @@ object XxHash64 {
                 v3 = round(v3, readLongLE(input, offset)); offset += 8
                 v4 = round(v4, readLongLE(input, offset)); offset += 8
             }
-            h64 = java.lang.Long.rotateLeft(v1, 1) +
-                java.lang.Long.rotateLeft(v2, 7) +
-                java.lang.Long.rotateLeft(v3, 12) +
-                java.lang.Long.rotateLeft(v4, 18)
+            h64 = rotl(v1, 1) +
+                rotl(v2, 7) +
+                rotl(v3, 12) +
+                rotl(v4, 18)
 
             h64 = mergeRound(h64, v1)
             h64 = mergeRound(h64, v2)
@@ -50,17 +50,17 @@ object XxHash64 {
         while (offset + 8 <= len) {
             val k1 = round(0L, readLongLE(input, offset))
             h64 = h64 xor k1
-            h64 = java.lang.Long.rotateLeft(h64, 27) * prime1 + prime4
+            h64 = rotl(h64, 27) * prime1 + prime4
             offset += 8
         }
         if (offset + 4 <= len) {
             h64 = h64 xor ((readIntLE(input, offset).toLong() and 0xFFFFFFFFL) * prime1)
-            h64 = java.lang.Long.rotateLeft(h64, 23) * prime2 + prime3
+            h64 = rotl(h64, 23) * prime2 + prime3
             offset += 4
         }
         while (offset < len) {
             h64 = h64 xor ((input[offset].toLong() and 0xFFL) * prime5)
-            h64 = java.lang.Long.rotateLeft(h64, 11) * prime1
+            h64 = rotl(h64, 11) * prime1
             offset++
         }
 
@@ -75,7 +75,7 @@ object XxHash64 {
 
     private fun round(acc: Long, input: Long): Long {
         var a = acc + input * -4417276706812531889L
-        a = java.lang.Long.rotateLeft(a, 31)
+        a = rotl(a, 31)
         a *= -7046029288634856825L
         return a
     }
@@ -107,6 +107,11 @@ object XxHash64 {
     }
 }
 
+private fun rotl(x: Long, r: Int): Long {
+    val n = r and 63
+    return (x shl n) or (x ushr (64 - n))
+}
+
 // Deterministic digest for Block
 fun blockDigest(
     namespace: String,
@@ -119,4 +124,3 @@ fun blockDigest(
     val material = "$namespace|$id|$field|$value|$hlc"
     return XxHash64.hashString(material, seed)
 }
-

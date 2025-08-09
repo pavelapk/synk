@@ -76,11 +76,11 @@ class Synk internal constructor(
             factory = metaStoreFactory
         }
 
-        fun <T : Any> onMerged(clazz: KClass<T>, callback: (namespace: String, obj: T) -> Unit) = apply {
+        fun <T : Any> onMerged(clazz: KClass<T>, callback: suspend (namespace: String, obj: T) -> Unit) = apply {
             onMergedRegistry.register(clazz, callback)
         }
 
-        inline fun <reified T : Any> onMerged(noinline callback: (namespace: String, obj: T) -> Unit) = apply {
+        inline fun <reified T : Any> onMerged(noinline callback: suspend (namespace: String, obj: T) -> Unit) = apply {
             onMerged(T::class, callback)
         }
 
