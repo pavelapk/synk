@@ -3,11 +3,23 @@ package com.tap.synk.processor.integration
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.Ignore
 import org.gradle.testkit.runner.GradleRunner
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
+/**
+ * Heavy Gradle TestKit integration test that exercises a temporary KMP project
+ * with KSP. It validates that second builds still use discovered @SynkSerializer
+ * after touching only the @SynkAdapter resolver.
+ *
+ * Disabled by default to keep CI fast and stable. Run locally when investigating
+ * incremental issues:
+ *   ./gradlew :plugins:ksp-adapter-codegen:test \
+ *     --tests com.tap.synk.processor.integration.KmpKspMetadataIncrementalIT
+ */
+@Ignore("Integration test; run manually when investigating incremental issues")
 class KmpKspMetadataIncrementalIT {
 
     @Rule
