@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.symbol.processing)
 //    id("kotlinter-conventions")
     alias(libs.plugins.maven.publish)
+    id("java-gradle-plugin")
 }
 
 ksp {
@@ -43,6 +44,7 @@ dependencies {
     testImplementation(libs.kotlin.junit)
     testImplementation(libs.kotlin.compile.testing.core)
     testImplementation(libs.kotlin.compile.testing.ksp)
+    testImplementation(gradleTestKit())
 
     ksp(libs.autoservice.ksp)
 }

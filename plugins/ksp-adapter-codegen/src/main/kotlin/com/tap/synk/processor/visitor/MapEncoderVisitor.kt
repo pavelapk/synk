@@ -24,7 +24,17 @@ internal class MapEncoderVisitor(
         val mapEncoder = with(encoderContext) { mapEncoder() }
         val mapEncoderFileSpec = mapEncoderFileSpec(
             mapEncoder,
-        ) { addOriginatingKSFile(containingFile) }
-        mapEncoderFileSpec.writeTo(codeGenerator = processorContext.codeGenerator, aggregating = false)
+        ) {
+            // The generated MapEncoder depends on the CRDT declaration and on any
+            // discovered @SynkSerializer classes. Declare all as originating to
+            // make KSP incremental aware of these dependencies.
+            addOriginatingKSFile(containingFile)
+            serializers.forEach { serializerDecl ->
+                serializerDecl.containingFile?.let { addOriginatingKSFile(it) }
+            }
+        }
+        // Mark as aggregating because output depends on symbols beyond the CRDT class
+        // (e.g., external @SynkSerializer declarations, sealed subclasses).
+        mapEncoderFileSpec.writeTo(codeGenerator = processorContext.codeGenerator, aggregating = true)
     }
 }
