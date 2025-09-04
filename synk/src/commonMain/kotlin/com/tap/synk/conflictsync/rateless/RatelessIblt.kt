@@ -30,7 +30,10 @@ internal class RatelessIblt(
     private val sessionSalt: Long,
 ) {
     private lateinit var localSet: Set<Hash64>
-    private var aggregated: Iblt? = null
+    private val diffs = mutableListOf<Iblt>()
+    private val decodedHere = linkedSetOf<Hash64>()
+    private val decodedThere = linkedSetOf<Hash64>()
+    private var sawPeerSymbol: Boolean = false
 
     fun localSet(hashes: Set<Hash64>) { this.localSet = hashes }
 
@@ -41,22 +44,50 @@ internal class RatelessIblt(
     }
 
     fun absorb(peer: Symbol) {
-        val a = Iblt(params.ibltCellsPerSymbol, params.ibltHashFunctions, saltFor(peer.index))
+        val salt = saltFor(peer.index)
+        val a = Iblt(params.ibltCellsPerSymbol, params.ibltHashFunctions, salt)
         localSet.forEach { a.insert(it) }
-        val b = Iblt.fromBytes(params.ibltCellsPerSymbol, params.ibltHashFunctions, saltFor(peer.index), peer.bytes)
+        val b = Iblt.fromBytes(params.ibltCellsPerSymbol, params.ibltHashFunctions, salt, peer.bytes)
         b.diffAssign(a)
-        // For now, use the latest symbol only; sufficient for small deltas
-        aggregated = b
+
+        // Remove already-decoded keys from the new diff
+        for (k in decodedHere) b.erase(k)
+        for (k in decodedThere) b.insert(k)
+
+        if (!b.isEmpty()) diffs += b
+        sawPeerSymbol = true
     }
 
     fun tryDecode(): DecodeResult {
-        val agg = aggregated ?: return DecodeResult.NeedMore
-        val res = agg.peel() ?: return DecodeResult.NeedMore
-        val (presentAtB_notA, presentAtA_notB) = res
-        return DecodeResult.Done(
-            missingHere = presentAtB_notA,
-            missingThere = presentAtA_notB,
-        )
+        if (!sawPeerSymbol) return DecodeResult.NeedMore
+        if (diffs.isEmpty()) return DecodeResult.Done(decodedHere.toList(), decodedThere.toList())
+
+        var progress: Boolean
+        do {
+            progress = false
+            val iterator = diffs.listIterator()
+            while (iterator.hasNext()) {
+                val iblt = iterator.next()
+                val singles = iblt.extractSingletons()
+                if (singles.isNotEmpty()) progress = true
+                for ((key, sign) in singles) {
+                    if (sign > 0) {
+                        if (decodedHere.add(key)) {
+                            for (other in diffs) if (other !== iblt) other.erase(key)
+                        }
+                    } else {
+                        if (decodedThere.add(key)) {
+                            for (other in diffs) if (other !== iblt) other.insert(key)
+                        }
+                    }
+                }
+                if (iblt.isEmpty()) iterator.remove()
+            }
+        } while (progress && diffs.isNotEmpty())
+
+        return if (diffs.isEmpty()) {
+            DecodeResult.Done(decodedHere.toList(), decodedThere.toList())
+        } else DecodeResult.NeedMore
     }
 
     private fun saltFor(index: Int): Long = sessionSalt xor (index.toLong() * 0x9E3779B97F4A7C15UL.toLong())

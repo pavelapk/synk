@@ -8,35 +8,63 @@ import com.tap.synk.meta.store.MetaStoreFactory
 import com.tap.synk.relay.Message
 import com.tap.synk.conflictsync.model.Block
 
+data class RecomposeApplyStats(
+    val finalizedDelta: Int,
+    val stagedBlocksDelta: Int,
+    val currentStagedCount: Int,
+)
+
 internal class Recomposer(
     private val synk: Synk,
     private val adapters: SynkAdapterStore,
     private val metas: MetaStoreFactory,
 ) {
-    /** Group blocks by (namespace,id), rebuild CRDTs, and merge via inbound() with old if available. */
-    suspend fun applyInbound(blocks: List<Block>) {
-        if (blocks.isEmpty()) return
+    // Staging buffers by (namespace,id)
+    private val staging = mutableMapOf<Pair<String, String>, MutableMap<String, String>>()
+    private val stagingMeta = mutableMapOf<Pair<String, String>, MutableMap<String, String>>()
 
+    /** Stage blocks by (namespace,id). Try to finalize each group; if decode fails, keep staged. */
+    suspend fun applyInbound(blocks: List<Block>): RecomposeApplyStats {
+        if (blocks.isEmpty()) return RecomposeApplyStats(0, 0, staging.size)
         val groups = blocks.groupBy { it.key.namespace to it.key.id }
+        var finalized = 0
+        var stagedBlocks = 0
         for ((nsId, group) in groups) {
-            val (namespace, _) = nsId
-            val adapter = adapters.resolve(namespace)
-            val crdtMap = group.associate { it.key.field to it.value }
-            val metaMap = group.associate { it.key.field to it.hlc }
-            val crdt = adapter.decode(crdtMap)
-            val id = adapter.resolveId(crdt)
-
-            // Load old if we can; if no StateSource is registered, treat as new
-            val old: Any? = try {
-                synk.stateSourceRegistry.resolve(namespace).byId(id)
-            } catch (_: Throwable) { null }
-
-            // Merge using existing merge semantics (inbound updates meta store itself)
-            val message = Message(crdt, Meta(crdt::class.qualifiedName ?: "", metaMap))
-            val merged = synk.inbound(message, old)
-
-            // Allow host to persist merged CRDT if configured (type-specific)
-            synk.onMergedRegistry.resolve(namespace)?.invoke(namespace, merged)
+            val incoming = staging.getOrPut(nsId) { mutableMapOf() }
+            val metaIncoming = stagingMeta.getOrPut(nsId) { mutableMapOf() }
+            for (b in group) {
+                incoming[b.key.field] = b.value
+                metaIncoming[b.key.field] = b.hlc
+                stagedBlocks++
+            }
+            if (tryFinalize(nsId)) finalized++
         }
+        return RecomposeApplyStats(finalized, stagedBlocks, staging.size)
+    }
+
+    /** Attempt to decode and merge a staged object. If decode fails (missing fields), leave staged. */
+    private suspend fun tryFinalize(nsId: Pair<String, String>): Boolean {
+        val (namespace, id) = nsId
+        val adapter = adapters.resolve(namespace)
+        val incomingMap = staging[nsId] ?: return false
+        val metaMap = stagingMeta[nsId] ?: return false
+
+        val old: Any? = try {
+            synk.stateSourceRegistry.resolve(namespace).byId(id)
+        } catch (_: Throwable) { null }
+
+        val baseMap: Map<String, String> = if (old != null) adapter.encode(old) else emptyMap()
+        val mergedMap = baseMap + incomingMap
+
+        val crdt = runCatching { adapter.decode(mergedMap) }.getOrNull() ?: return false
+
+        val message = Message(crdt, Meta(crdt::class.qualifiedName ?: "", metaMap.toMap()))
+        val merged = synk.inbound(message, old)
+        synk.onMergedRegistry.resolve(namespace)?.invoke(namespace, merged)
+
+        // Clear staging once successfully applied
+        staging.remove(nsId)
+        stagingMeta.remove(nsId)
+        return true
     }
 }

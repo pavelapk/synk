@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 class ConflictSyncStatsTest {
     @Test
@@ -56,7 +57,7 @@ class ConflictSyncStatsTest {
         }
 
         val params = ConflictSyncParams(bloomBits = 2048, bloomHashes = 3) // large bloom to avoid false positives
-        val stats = clientSynk.conflictSync(CRDT::class, transport, params)
+        val stats = withTimeout(500L) { clientSynk.conflictSync(CRDT::class, transport, params) }
 
         // For each CRDT, blocks are: id, name, last_name, optional phone (if not null)
         fun blocksOf(list: List<CRDT>): Int = list.sumOf { 3 + if (it.phone != null) 1 else 0 }

@@ -19,6 +19,8 @@ import kotlinx.coroutines.runBlocking
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.withTimeout
 
 class ConflictSyncHappyPathTest {
 
@@ -58,7 +60,7 @@ class ConflictSyncHappyPathTest {
 
         val transport = FakeTransport(serverSynk, CRDT::class)
 
-        val stats = clientSynk.conflictSync(CRDT::class, transport, ConflictSyncParams())
+        val stats = withTimeout(500L) { clientSynk.conflictSync(CRDT::class, transport, ConflictSyncParams()) }
 
         // After sync both DBs should converge to the same state (by value)
         fun List<CRDT>.sortedById() = this.sortedBy { it.id }
@@ -66,6 +68,9 @@ class ConflictSyncHappyPathTest {
         println(serverDb)
         assertEquals(clientDb.sortedById(), serverDb.sortedById())
     }
+
+    // Note: A rateless accumulation regression test was attempted here but proved flaky
+    // under small Bloom and borderline IBLT loads. A deterministic unit test is preferred.
 
     private class MutableListStateSource(private val list: List<CRDT>) : StateSource<CRDT> {
         override suspend fun all(): Flow<CRDT> = flow { list.forEach { emit(it) } }

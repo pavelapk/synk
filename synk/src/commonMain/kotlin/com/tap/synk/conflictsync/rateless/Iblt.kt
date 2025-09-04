@@ -91,6 +91,59 @@ internal class Iblt(
         return pos to neg
     }
 
+    /**
+     * Extract as many singleton keys as possible by mutating this IBLT, without
+     * requiring full decode. Returns a list of (key, sign) where sign is +1 for
+     * present-at-B-not-A and -1 for present-at-A-not-B.
+     */
+    fun extractSingletons(): List<Pair<Hash64, Int>> {
+        val found = mutableListOf<Pair<Hash64, Int>>()
+        val queue = ArrayDeque<Int>()
+        for (i in 0 until m) if (isSingleton(i)) queue.add(i)
+
+        while (queue.isNotEmpty()) {
+            val i = queue.removeFirst()
+            val cell = cells[i]
+            if (!isSingletonCell(cell)) continue
+
+            val key = cell.keyXor
+            val g = cell.hashXor
+            if (verHash(key) != g) continue
+
+            val sign = if (cell.count > 0) +1 else -1
+            found += key to sign
+
+            // Remove key from neighbors (mutates this IBLT)
+            repeat(h) { j ->
+                val idx = index(key, j)
+                val c = cells[idx]
+                c.count = c.count - sign
+                c.keyXor = c.keyXor xor key
+                c.hashXor = c.hashXor xor g
+                if (isSingletonCell(c)) queue.add(idx)
+            }
+        }
+
+        return found
+    }
+
+    fun isEmpty(): Boolean {
+        for (i in 0 until m) if (!isEmptyCell(cells[i])) return false
+        return true
+    }
+
+    fun deepCopy(): Iblt {
+        val copy = Iblt(m, h, salt)
+        for (i in 0 until m) {
+            val s = cells[i]
+            val d = copy.cells[i]
+            d.count = s.count
+            d.keyXor = s.keyXor
+            d.hashXor = s.hashXor
+        }
+        return copy
+    }
+
     fun toBytes(): ByteArray = serializeCells(cells)
 
     companion object {

@@ -22,6 +22,9 @@ data class SyncStats(
     val recvBlocks: Int,
     val symbolsTx: Int,
     val symbolsRx: Int,
+    val objectsFinalized: Int,
+    val stagedBufferedBlocks: Int,
+    val objectsStagedAtEnd: Int,
 )
 
 internal class ConflictSyncEngine(
@@ -57,9 +60,12 @@ internal class ConflictSyncEngine(
             InitBloom(namespace, params.bloomBits, params.bloomHashes, bloomA.toBytes()),
         )
 
-        recomposer.applyInbound(init.definitelyMissingAtA)
+        val applyInit = recomposer.applyInbound(init.definitelyMissingAtA)
         var recvBlocks = init.definitelyMissingAtA.size
         var sentBlocks = 0
+        var objectsFinalized = applyInit.finalizedDelta
+        var stagedBufferedBlocks = applyInit.stagedBlocksDelta
+        var stagedAtEnd = applyInit.currentStagedCount
 
         val bloomB = BloomFilter.fromBytes(params.bloomBits, params.bloomHashes, init.bloomB)
         val exclusiveA = blocksA.filter {
@@ -116,15 +122,17 @@ internal class ConflictSyncEngine(
                         ),
                     )
 
-                    recomposer.applyInbound(eosReply.blocksBMissing)
+                    val applyEos = recomposer.applyInbound(eosReply.blocksBMissing)
                     recvBlocks += eosReply.blocksBMissing.size
+                    objectsFinalized += applyEos.finalizedDelta
+                    stagedBufferedBlocks += applyEos.stagedBlocksDelta
+                    stagedAtEnd = applyEos.currentStagedCount
 
-                    stats = SyncStats(namespace, sentBlocks, recvBlocks, tx, rx)
+                    stats = SyncStats(namespace, sentBlocks, recvBlocks, tx, rx, objectsFinalized, stagedBufferedBlocks, stagedAtEnd)
                 }
             }
         }
 
-        return stats ?: SyncStats(namespace, sentBlocks, recvBlocks, tx, rx)
+        return stats ?: SyncStats(namespace, sentBlocks, recvBlocks, tx, rx, objectsFinalized, stagedBufferedBlocks, stagedAtEnd)
     }
 }
-
