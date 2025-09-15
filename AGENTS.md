@@ -12,7 +12,6 @@
 - Run JVM tests for `:synk`: `./gradlew :synk:jvmTest` — executes common/JVM tests and reports to `synk/build/test-results/jvmTest`.
 - Run tests for `ksp-adapter-codegen`: `./gradlew :plugins:ksp-adapter-codegen:test`
 - Lint Kotlin (ktlint): `./gradlew lintKotlin` | Auto-format: `./gradlew formatKotlin`.
-- WSL note: `cmd.exe /c gradlew <task>` to run Gradle from WSL.
 
 ## Coding Style & Naming Conventions
 - Kotlin style: `ktlint_official`, 4-space indent, LF line endings, UTF-8, max line length 160.
