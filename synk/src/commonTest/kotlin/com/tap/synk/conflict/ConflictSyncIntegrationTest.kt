@@ -170,6 +170,105 @@ class ConflictSyncIntegrationTest {
         }
     }
 
+    @Test
+    fun `large similar datasets reconcile with minimal transfer`() {
+        val previousLogging = ConflictSyncLogger.isEnabled
+        ConflictSyncLogger.isEnabled = true
+        try {
+            runBlocking {
+                val adapter = CRDTAdapter()
+
+                val baseRecords = (1..100).associate { index ->
+                    val id = index.toString().padStart(3, '0')
+                    id to CRDT(
+                        id = id,
+                        name = "Name$id",
+                        last_name = "Surname$id",
+                        phone = 1000 + index,
+                    )
+                }
+
+                val initiatorData = baseRecords.mapValues { (_, value) -> value.copy() }.toMutableMap()
+                val responderData = baseRecords.mapValues { (_, value) -> value.copy() }.toMutableMap()
+
+                listOf("010", "020", "030", "040", "050").forEachIndexed { idx, id ->
+                    initiatorData[id] = initiatorData.getValue(id).copy(phone = 9000 + idx)
+                }
+                listOf("015", "025", "035", "045", "055").forEachIndexed { idx, id ->
+                    responderData[id] = responderData.getValue(id).copy(last_name = "Responder$idx")
+                }
+
+                (1..3).forEach { idx ->
+                    val id = "init-extra-$idx"
+                    initiatorData[id] = CRDT(
+                        id = id,
+                        name = "InitExtra$idx",
+                        last_name = "Extra",
+                        phone = 7000 + idx,
+                    )
+                }
+                (1..3).forEach { idx ->
+                    val id = "resp-extra-$idx"
+                    responderData[id] = CRDT(
+                        id = id,
+                        name = "RespExtra$idx",
+                        last_name = "Extra",
+                        phone = 8000 + idx,
+                    )
+                }
+
+                val initiatorSynk = buildSynk(adapter, initiatorData, "initiator-large")
+                val responderSynk = buildSynk(adapter, responderData, "responder-large")
+
+                initiatorData.values.forEach { initiatorSynk.recordChange(it) }
+                responderData.values.forEach { responderSynk.recordChange(it) }
+
+                ConflictSyncLogger.divider(ConflictSyncLogger.Role.INITIATOR, "Large dataset run")
+                ConflictSyncLogger.divider(ConflictSyncLogger.Role.RESPONDER, "Large dataset run")
+
+                val transportLink = LinkedTransport()
+                try {
+                    val configuration = ConflictSyncConfiguration(pageSize = 32, ratelessBatchSize = 8)
+
+                    val responderJob = async {
+                        responderSynk.respondConflictSync(
+                            namespace = CRDT::class,
+                            transport = transportLink.responder(),
+                            configuration = configuration,
+                        )
+                    }
+
+                    val initiatorStats = initiatorSynk.conflictSync(
+                        namespace = CRDT::class,
+                        transport = transportLink.initiator(),
+                        configuration = configuration,
+                    )
+                    val responderStats = responderJob.await()
+
+                    val expectedIds = initiatorData.keys union responderData.keys
+                    assertEquals(expectedIds, initiatorData.keys)
+                    assertEquals(expectedIds, responderData.keys)
+
+                    val mergedInitiator = initiatorData.values.sortedBy { it.id }
+                    val mergedResponder = responderData.values.sortedBy { it.id }
+                    assertEquals(mergedInitiator, mergedResponder)
+
+                    assertTrue(initiatorStats.falseMatches <= 32)
+                    assertTrue(responderStats.falseMatches <= 32)
+                    assertTrue(initiatorStats.outbound.size <= expectedIds.size + 32)
+                    assertTrue(responderStats.outbound.size <= expectedIds.size + 32)
+
+                    printStats("Large • Initiator", initiatorStats)
+                    printStats("Large • Responder", responderStats)
+                } finally {
+                    transportLink.close()
+                }
+            }
+        } finally {
+            ConflictSyncLogger.isEnabled = previousLogging
+        }
+    }
+
     private fun printStats(label: String, stats: ConflictSyncStats) {
         val prefix = "[Test][ConflictSync]"
         val border = "═".repeat(label.length + 10)
