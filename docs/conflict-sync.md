@@ -8,13 +8,13 @@ The high-level flow repeats three passes until both replicas converge:
 2. Ship complete snapshots for objects that are missing on one replica.
 3. For the remaining objects, reconcile only the fields that actually changed.
 
-Each pass is resumable. If either peer drops off the network, both can restart from the last confirmed step without throwing away previous work.
+Each pass runs in order. If either peer drops off the network, the current sync is aborted and both replicas start over from stage 1 on the next attempt.
 
 ## Goals
 
 - **Simplicity and clarity.** Every payload corresponds to a Kotlin data structure and the control flow is a straight, well-documented pipeline.
 - **Scalability.** Summaries and field catalogs are streamed in bounded chunks; large datasets never require a full in-memory materialisation.
-- **Resilience to weak networks.** Bloom filters and rateless set reconciliation avoid fixed numbers of roundtrips, while durable checkpoints allow the protocol to resume after disconnects.
+- **Resilience to weak networks.** Bloom filters and rateless set reconciliation avoid fixed numbers of roundtrips, so retries after a disconnect reprocess only lightweight summaries before reaching the deltas again.
 
 ## Terms and Data Model
 
@@ -38,24 +38,6 @@ We refer to the ordered list of `ObjectSummary`s as the **inventory**. It is the
 - `SummaryBloom` and `FieldBloom` are Bloom filters constructed over object digests and field digests respectively. They are sent ahead of heavier payloads to filter obvious matches.
 - `RatelessSymbol` is the unit exchanged by the rateless Invertible Bloom Lookup Table (IBLT) duet. Given enough symbols, the peers recover the set difference without agreeing on a fixed number of rounds.
 
-### Session records
-
-`SessionToken` captures the confirmed progress for the current run:
-
-```kotlin
-data class SessionToken(
-    val sessionId: SyncSessionId,
-    val summaryCursor: ObjectKey?,
-    val snapshotCursor: ObjectKey?,
-    val fieldCursor: FieldKey?,
-    val parameters: NegotiatedParameters
-)
-```
-
-Tokens are stored durably by both peers. The initiator keeps one token per remote replica (usually keyed by its logical peer id). Servers persist the same information per connected client so they can honour resumptions across reconnects.
-
-The storage backing the token and the derived artifacts can be any reliable database — *session store*.
-
 ## Components
 
 ### StateSource
@@ -73,13 +55,13 @@ For each object emitted by `StateSource.scan`, the builder:
 1. Serializes the object with the registered Synk adapter to obtain canonical field encodings.
 2. Reads the per-field HLCs from the Synk MetaStore.
 3. Computes `FieldVersion`s and the resulting `ObjectSummary`.
-4. Writes both the summary and the field catalog into the session store for later reuse.
+4. Caches both the summary and the field catalog in memory for the rest of the run.
 
-Because every write goes straight to durable storage, the builder's working set stays flat even when scanning millions of rows.
+Because the cache only holds the objects in flight, the builder's working set stays flat even when scanning millions of rows.
 
 ### CatalogStore
 
-The catalog keeps the field metadata and encoded blocks derived during the inventory pass. Later stages look up `FieldVersion`s and `BlockPayload`s here instead of re-reading or re-serializing objects from the primary database.
+The catalog keeps the field metadata and encoded blocks derived during the inventory pass. The data lives in memory for the lifetime of the sync, so later stages can look up `FieldVersion`s and `BlockPayload`s without re-reading or re-serializing objects from the primary database.
 
 ### MergeHandler
 
@@ -93,16 +75,7 @@ Applications supply their networking implementation through this interface. The 
 - **Snapshot channel.** Stream missing objects.
 - **Field channel.** Exchange field-level Bloom filters, rateless symbols, and block payloads.
 
-Every endpoint is idempotent; senders include the `sessionId` and the relevant keys so receivers can de-duplicate.
-
-### SessionStore
-
-The session store persists:
-
-- `SessionToken` rows.
-- The cached `ObjectSummary`s and `FieldVersion`/`BlockPayload` entries generated locally.
-
-Either peer can implement this as tables inside their existing application database. The only requirement is durability across application restarts.
+Every endpoint is idempotent; senders include stable object keys so receivers can de-duplicate.
 
 ### SyncStats
 
@@ -112,18 +85,18 @@ Either peer can implement this as tables inside their existing application datab
 
 Terminology: Replica **A** starts the session, replica **B** responds. The flow, however, is symmetric—each stage runs in both directions.
 
-### Stage 0 – Handshake and resume
+### Stage 0 – Handshake
 
-1. A calls `openSession` with its preferred chunk size, Bloom parameters, and the last `SessionToken` it recorded for B.
-2. B looks up its own token for A. Both sides agree on the resume cursors. If either token is absent, cursors start at `null`.
-3. Each replica ensures the session store has space for new summaries and catalogs, then records the resolved parameters in a fresh token row.
+1. A calls `openSession` with its preferred chunk size, Bloom parameters, and the latest inventory estimates.
+2. B responds with its own preferences; both sides stabilise on the negotiated parameters for this run.
+3. Each replica sets up its in-memory catalog cache so subsequent stages can reuse encoded data without touching the primary database again.
 
 ### Stage 1 – Summary discovery
 
-1. A streams up to `N` `ObjectSummary`s starting after `summaryCursor`. Before shipping them, it hashes the digests into a `SummaryBloom`.
+1. A streams up to `N` `ObjectSummary`s starting after its in-memory `summaryCursor`. Before shipping them, it hashes the digests into a `SummaryBloom`.
 2. B intersects the Bloom filter with its own inventory to quickly classify most objects as “already known by A”. Only the ambiguous digests proceed to rateless reconciliation.
 3. Both sides seed an IBLT with the ambiguous digests and exchange `RatelessSymbol`s until the decoder yields `missingOnA` and `missingOnB`.
-4. B responds with an acknowledgement containing the decoded difference and its new cursor hint. A updates `summaryCursor` in the token and proceeds to the next chunk.
+4. B responds with an acknowledgement containing the decoded difference and its new cursor hint. A updates its in-memory `summaryCursor` and proceeds to the next chunk.
 5. Once A reaches the end of its inventory, B mirrors the process so it can learn about records that only exist on A.
 
 Because the Bloom filter removes most matches upfront, the rateless exchange typically carries only the novel digests. The complexity stays sub-linear even as the dataset grows.
@@ -132,7 +105,7 @@ Because the Bloom filter removes most matches upfront, the rateless exchange typ
 
 1. For every `ObjectKey` listed in `missingOnPeer`, the sender reads the cached `SnapshotPayload` from the catalog store.
 2. Snapshots are streamed in deterministic order. Receivers apply them through `Synk.inbound`, then persist the resolved object with `MergeHandler`.
-3. After each acknowledged batch the sender bumps `snapshotCursor` in the token. Resuming a session simply restarts from the next unsent key.
+3. After each acknowledged batch the sender advances its in-memory `snapshotCursor`. If the transport disconnects, the next run restarts from stage 1 and rebuilds the cursor.
 
 Objects that were missing on one side never proceed to field-level reconciliation—they are always hydrated in full.
 
@@ -147,25 +120,19 @@ Objects that were missing on one side never proceed to field-level reconciliatio
 
 1. For every field the peer lacks—or where the peer advertises a lower HLC—the sender fetches the corresponding `BlockPayload` from the catalog store.
 2. Blocks are streamed in ascending `(namespace, id, field)` order. Receivers call `Synk.inbound` for each block and stage the object until every expected field arrives.
-3. After emitting all blocks for an object, the sender updates `fieldCursor` in the token.
+3. After emitting all blocks for an object, the sender updates its in-memory `fieldCursor` so the next chunk can continue without re-sending earlier entries.
 4. When both replicas recompute matching `ObjectSummary`s for the object, it leaves the divergent set.
 
 ### Stage 5 – Completion
 
 1. When no missing objects and no divergent fields remain, both replicas exchange a `SessionComplete` message containing their final `SyncStats`.
-2. Each side clears the token and prunes cached catalogs for that session to reclaim storage.
-
-## Session token lifecycle
-
-- **Where stored?** Each peer stores its own tokens in the session store. Mobile clients usually persist one token per remote replica. Servers keep a token per client (or per namespace) so a reconnect can resume mid-stage.
-- **Who updates them?** Only the local replica writes its token after receiving acknowledgements from the peer.
-- **Consistency model.** Tokens are idempotent; rewriting the same cursor twice is harmless. If a token is lost, the next run restarts from stage 1.
+2. Each side drops the in-memory catalogs to reclaim storage.
 
 ## Meeting the goals
 
-- **Simple control flow.** The algorithm is a linear pipeline with explicit checkpoints. Every transformation is visible in the session token and catalog.
+- **Simple control flow.** The algorithm is a linear pipeline with explicit checkpoints. Every transformation remains visible through the in-memory catalog and transport messages.
 - **Scalable diffing.** Bloom filters remove the bulk of matches before rateless decoding kicks in, so bandwidth consumption is proportional to the actual differences, not to the size of the dataset.
-- **Network resilience.** Chunks are small, idempotent, and durably checkpointed. Losing a connection only requires replaying the current chunk, not the entire sync.
+- **Network resilience.** Chunks stay small and idempotent. If the connection drops, the next sync restarts cleanly and quickly rebuilds the lightweight summaries before progressing to the remaining deltas.
 
 ## Example wiring
 
@@ -182,8 +149,6 @@ val customerMergeHandler = MergeHandler<Customer> { namespace, customer ->
     customerDao.upsert(customer)
 }
 
-val sessionStore = AppSessionStore(database) // your durable SessionStore implementation
-
 val synk = Synk.Builder(storageConfig())
     .registerSynkAdapter(CustomerAdapter())
     .registerStateSource(Customer::class, customerSource)
@@ -192,22 +157,21 @@ val synk = Synk.Builder(storageConfig())
 
 val stats = synk.conflictSync(
     namespace = Customer::class,
-    transport = transport,
-    sessionStore = sessionStore
+    transport = transport
 )
 ```
 
-`sessionStore` exposes CRUD operations for `SessionToken`s and the catalog tables. The transport may be anything from HTTP with long-polling to WebSockets or BLE, provided it can stream the three channels described above.
+The transport may be anything from HTTP with long-polling to WebSockets or BLE, provided it can stream the three channels described above.
 
 ## Thought experiments
 
 - **Sparse divergence.** Two replicas differ in only ten out of 50 000 objects. Bloom filters immediately classify the rest as matches. Rateless decoding converges after a handful of symbols, so the bandwidth largely comprises the ten snapshots or field blocks that truly changed.
 - **Hotspot during sync.** While a sync is in progress, a user edits a record on replica B. The HLC increases, so if the record was processed earlier the change will show up in the next session; if it happens mid-session, the field stage treats it like any other divergence and applies the newer block.
-- **Unreliable network.** A device loses connectivity after sending half the field catalog. Upon reconnecting, it reads `fieldCursor` from the session store and resumes streaming from the next pending field without replaying the entire inventory.
+- **Unreliable network.** A device loses connectivity after sending half the field catalog. On the next attempt it restarts from stage 1; the lightweight summary pass quickly rebuilds context before deltas flow again.
 - **Large object.** An object contains hundreds of fields. The field Bloom removes most matches. Only a few field digests flow through the rateless exchange, so the bandwidth remains manageable.
 
 ## Trade-offs and open questions
 
-- Field catalogs copy the encoded value into the session store. This avoids rereading from the primary database but increases temporary storage usage during the session.
+- Field catalogs copy the encoded value into the in-memory catalog. This avoids rereading from the primary database but increases temporary memory usage during the session.
 - Bloom parameters need tuning. Extremely small filters increase false positives and therefore rateless work; extremely large filters cost bandwidth on their own.
-- Sessions are resumable, but they are still scoped to one namespace at a time. Multi-namespace orchestration remains the caller's responsibility.
+- A dropped connection restarts the entire flow, so multi-namespace orchestration must decide whether to retry immediately or batch retries to reduce churn.
