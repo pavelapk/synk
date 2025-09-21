@@ -4,6 +4,9 @@ import com.tap.hlc.HybridLogicalClock
 import com.tap.synk.adapter.SynkAdapter
 import com.tap.synk.adapter.store.SynkAdapterStore
 import com.tap.synk.config.ClockStorageConfiguration
+import com.tap.synk.conflict.ConflictSyncRegistry
+import com.tap.synk.conflict.MergeHandler
+import com.tap.synk.conflict.StateSource
 import com.tap.synk.meta.store.InMemoryMetaStoreFactory
 import com.tap.synk.meta.store.MetaStoreFactory
 import com.tap.synk.relay.MessageSemigroup
@@ -25,6 +28,7 @@ class Synk internal constructor(
     val clockStorageConfiguration: ClockStorageConfiguration,
     val factory: MetaStoreFactory = InMemoryMetaStoreFactory(),
     val synkAdapterStore: SynkAdapterStore = SynkAdapterStore(),
+    internal val conflictSyncRegistry: ConflictSyncRegistry = ConflictSyncRegistry(),
 ) {
     internal val hlc: MutableStateFlow<HybridLogicalClock> = MutableStateFlow(loadClock())
     internal val merger: MessageSemigroup<Any> = MessageSemigroup(synkAdapterStore)
@@ -52,6 +56,9 @@ class Synk internal constructor(
         @PublishedApi
         internal var synkAdapterStore = SynkAdapterStore()
 
+        @PublishedApi
+        internal var conflictSyncRegistry = ConflictSyncRegistry()
+
         inline fun <reified T : Any> registerSynkAdapter(synkAdapter: SynkAdapter<T>) = apply {
             val clazz = T::class
 
@@ -65,6 +72,24 @@ class Synk internal constructor(
             synkAdapterStore.register(clazz, synkAdapter)
         }
 
+        @PublishedApi
+        internal fun <T : Any> registerStateSource(clazz: KClass<T>, stateSource: StateSource<T>) {
+            conflictSyncRegistry.registerStateSource(clazz, stateSource)
+        }
+
+        @PublishedApi
+        internal fun <T : Any> registerMergeHandler(clazz: KClass<T>, mergeHandler: MergeHandler<T>) {
+            conflictSyncRegistry.registerMergeHandler(clazz, mergeHandler)
+        }
+
+        inline fun <reified T : Any> registerStateSource(stateSource: StateSource<T>) = apply {
+            registerStateSource(T::class, stateSource)
+        }
+
+        inline fun <reified T : Any> onMerged(mergeHandler: MergeHandler<T>) = apply {
+            registerMergeHandler(T::class, mergeHandler)
+        }
+
         fun metaStoreFactory(metaStoreFactory: MetaStoreFactory) = apply {
             factory = metaStoreFactory
         }
@@ -74,6 +99,7 @@ class Synk internal constructor(
                 storageConfiguration,
                 factory ?: InMemoryMetaStoreFactory(),
                 synkAdapterStore,
+                conflictSyncRegistry,
             )
         }
     }
