@@ -1,6 +1,6 @@
 # Conflict Sync
 
-Conflict Sync is Synk's reconciliation engine. It mirrors the working Bloom+Rateless implementation that lives in the Rust reference repository at `/mnt/c/Users/user/IdeaProjects/conflict-sync/src/sync/bloomriblthashes.rs`. This document translates that algorithm to Kotlin, explains the data model planned in the `:synk` module, and shows how the transport contract fits around it. The goal is a simple, reliable implementation that exchanges only the necessary pieces of state.
+Conflict Sync is Synk's reconciliation engine. It mirrors the working Bloom+Rateless implementation that lives in the Rust reference repository at https://github.com/pedrogomes29/conflict-sync/blob/dev/src/sync/bloomriblthashes.rs. This document translates that algorithm to Kotlin, explains the data model planned in the `:synk` module, and shows how the transport contract fits around it. The goal is a simple, reliable implementation that exchanges only the necessary pieces of state.
 
 ## Terminology borrowed from the Rust engine
 
