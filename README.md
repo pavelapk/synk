@@ -191,23 +191,9 @@ Synk.outbound(new: T, old: T? = null): Message<T>
 Synk.inbound(message: Message<T>, old: T? = null): T
 ```
 
-## Change Detection
+## Change Detection - Conflict Sync
 
-Coming soon ...
-
-## Serialization
-
-To aid the relay of messages between applications Synk provides methods for serializing Messages to and from json.
-
-## Conflict Sync
-
-Conflict Sync is Synk's streaming reconciliation layer. It combines per-field HLC metadata with Bloom-filter prefilters and a rateless IBLT exchange so bandwidth stays proportional to the real delta between replicas:
-
-- Stream object summaries (the inventory) and filter them through Blooms before rateless decoding the ambiguous digests.
-- Hydrate any object that is missing on one side with a full snapshot.
-- Exchange field fingerprints with another Bloom + rateless pass, then send only the blocks whose HLCs are newer.
-
-Every stage checkpoints to a `SessionToken`, so a dropped connection restarts from the last acknowledged chunk instead of replaying the whole sync. The full protocol is documented in [docs/conflict-sync.md](docs/conflict-sync.md).
+Conflict Sync is Synk's streaming reconciliation layer. The full protocol is documented in [docs/conflict-sync.md](docs/conflict-sync.md).
 
 ### Registering data access
 
@@ -215,7 +201,6 @@ Conflict Sync needs a way to read the current state and a way to persist merges:
 
 - `StateSource` pages through your objects in deterministic order and lets the engine look them up by id when it needs to ship a snapshot or confirm a merge.
 - `MergeHandler` writes the reconciled object back to your database once `Synk.inbound` decides the winning values.
-- `SessionStore` persists the session tokens and cached catalogs that let syncs resume mid-flight.
 
 ```kotlin
 val stateSource = object : StateSource<Customer> {
@@ -230,8 +215,6 @@ val mergeHandler = MergeHandler<Customer> { namespace, customer ->
     customerDao.upsert(customer)
 }
 
-val sessionStore = AppSessionStore(database) // persists SessionToken + catalogs in your DB
-
 val synk = Synk.Builder(clockStorageConfig)
     .registerSynkAdapter(CustomerAdapter())
     .registerStateSource(Customer::class, stateSource)
@@ -241,11 +224,14 @@ val synk = Synk.Builder(clockStorageConfig)
 val stats = synk.conflictSync(
     namespace = Customer::class,
     transport = transport,
-    sessionStore = sessionStore
 )
 ```
 
-`conflictSync` returns `SyncStats` so you can log how many objects were scanned, how many snapshots or blocks crossed the wire, and how long each stage took. `sessionStore` persists the checkpoints and cached catalogs required to resume long-running syncs.
+`conflictSync` returns `SyncStats` so you can log how many objects were scanned, how many data crossed the wire, and how long each stage took.
+
+## Serialization
+
+To aid the relay of messages between applications Synk provides methods for serializing Messages to and from json.
 
 These serializers make use of the Synk adapters provided and tend to have better performance than reflections powered
 serializers like gson.
