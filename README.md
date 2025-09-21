@@ -191,13 +191,48 @@ Synk.outbound(new: T, old: T? = null): Message<T>
 Synk.inbound(message: Message<T>, old: T? = null): T
 ```
 
-## Change Detection
+## Change Detection - Conflict Sync
 
-Coming soon ...
+Conflict Sync is Synk's streaming reconciliation layer. The full protocol is documented in [docs/conflict-sync.md](docs/conflict-sync.md).
+
+### Registering data access
+
+Conflict Sync needs a way to read the current state and a way to persist merges:
+
+- `StateSource` pages through your objects in deterministic order and lets the engine look them up by id when it needs to ship a snapshot or confirm a merge.
+- `MergeHandler` writes the reconciled object back to your database once `Synk.inbound` decides the winning values.
+
+```kotlin
+val stateSource = object : StateSource<Customer> {
+    override suspend fun scan(after: ObjectKey?, limit: Int): List<Customer> =
+        customerDao.fetchPage(after = after, limit = limit)
+
+    override suspend fun byId(id: String): Customer? =
+        customerDao.findById(id)
+}
+
+val mergeHandler = MergeHandler<Customer> { namespace, customer ->
+    customerDao.upsert(customer)
+}
+
+val synk = Synk.Builder(clockStorageConfig)
+    .registerSynkAdapter(CustomerAdapter())
+    .registerStateSource(Customer::class, stateSource)
+    .onMerged(Customer::class, mergeHandler)
+    .build()
+
+val stats = synk.conflictSync(
+    namespace = Customer::class,
+    transport = transport,
+)
+```
+
+`conflictSync` returns `SyncStats` so you can log how many objects were scanned, how many data crossed the wire, and how long each stage took.
 
 ## Serialization
 
 To aid the relay of messages between applications Synk provides methods for serializing Messages to and from json.
+
 These serializers make use of the Synk adapters provided and tend to have better performance than reflections powered
 serializers like gson.
 
