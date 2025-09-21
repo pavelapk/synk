@@ -39,9 +39,11 @@ interface Measure {
 A field decomposition carries the minimum data required to merge one field on the remote peer. The `extract()` projection feeds both the Bloom filter and the rateless IBLT. Instead of concatenating strings by hand, we hash a canonical binary fingerprint produced by the encoder so that Kotlin and Rust agree on the hash input even if object keys evolve.
 
 ```kotlin
+@Serializable
 @JvmInline
 value class FieldFingerprint(val bytes: ByteArray)
 
+@Serializable
 data class FieldDecomposition(
     val namespace: String,
     val objectKey: ObjectKey,
@@ -62,7 +64,7 @@ data class FieldDecomposition(
 }
 ```
 
-`fingerprintEncoder` produces a deterministic byte array (for example, via `Buffer.pack` with little-endian ordering) that already includes the namespace, object identifier, field name, encoded value digest, and HLC tick. The actual digest used in Bloom/RIBLT structures is `xxHash64(fieldFingerprint.bytes)`, matching the `RandomState::hash_one` call in Rust. If we ever swap hash functions, both peers change the implementation simultaneously.
+Every type that crosses the transport boundary is annotated with `@Serializable` so applications can use Kotlin Serialization end to end. `ObjectKey` and `Hlc` already travel in existing Synk payloads and must also implement `@Serializable` for reuse here. `fingerprintEncoder` produces a deterministic byte array (for example, via `Buffer.pack` with little-endian ordering) that already includes the namespace, object identifier, field name, encoded value digest, and HLC tick. The digest used in Bloom/RIBLT structures is `xxHash64(fieldFingerprint.bytes)`, matching the `RandomState::hash_one` call in Rust. If we ever swap hash functions, both peers change the implementation simultaneously.
 
 ### Replica state
 
@@ -101,11 +103,9 @@ class ReplicaState<T : Any>(
 
 `StateSource.snapshot()` stands in for whichever streaming API we expose (batching via `scan`, Flow-backed cursor, etc.). `encodeToFields` is the Synk serializer that yields per-field binary encodings, and `readFields` retrieves stored HLC metadata.
 
-Remote peers run the same abstractions but respond to inbound requests. Their orchestration lives in a `ConflictSyncResponder` (described later); the initiator only ever sees remote effects via transport flows.
+### Session orchestration: initiator
 
-### Session driver (initiator)
-
-The initiator is implemented by `ConflictSyncBloomRateless`, a name that makes the algorithm obvious while keeping the public API under the `ConflictSync` umbrella. The object owns *only* the local replica and delegates every remote interaction to the transport streams.
+The initiator is implemented by `ConflictSyncBloomRateless`. The initiator/driver owns the local replica and delegates every remote interaction to transport flows.
 
 ```kotlin
 class ConflictSyncBloomRateless<T : Any>(
@@ -116,32 +116,30 @@ class ConflictSyncBloomRateless<T : Any>(
         local: ReplicaState<T>,
         transport: ConflictSyncTransport,
         tracker: ConflictSyncTracker
-    ) { /* mirrors the Rust steps from the initiator perspective */ }
+    ) { /* mirrors bloomriblthashes.rs from the initiator perspective */ }
 }
 ```
 
 Internally the driver:
 
-1. Builds the local Bloom filter, sends it over the transport, and waits for the responder’s Bloom+rateless reply.
+1. Builds the local Bloom filter, sends it as a single-element flow, and collects the responder’s Bloom response.
 2. Partitions its decompositions with the responder’s Bloom filter.
-3. Uses the rateless sketch returned by the responder to compute `localOnly` and `remoteOnly` hash buckets.
-4. Streams missing field data and hash requests back to the responder, then applies incoming decompositions once the responder replies.
+3. Collects the rateless sketch returned by the responder and computes `localOnly` / `remoteOnly` hash buckets.
+4. Streams missing field data and hash requests, then applies incoming decompositions once the responder replies.
 
-Because the initiator never holds remote state, the algorithm mirrors the Rust sequence while keeping the design realistic for a real-world library.
-
-### Responder
+### Session orchestration: responder
 
 The responder side listens on the same transport functions, builds its own `ReplicaState`, and executes the complementary steps:
 
-1. Receives the initiator’s Bloom filter, partitions its decompositions, and sends back `remoteFilter + RatelessSketch`.
-2. Processes follow-up decomposition payloads, returning data for any `HashRequest` envelopes.
-3. Applies incoming deltas through `ReplicaState.join` exactly like the initiator.
+1. Receives the initiator’s Bloom filter, partitions its decompositions, and emits its Bloom response.
+2. Hashes the “probably common” decompositions, builds the rateless sketch, and returns it.
+3. Processes incoming decomposition payloads, replying with matching data for any hash requests and joining deltas locally.
 
-Both sides share the same helper functions (`buildFilter`, `partition`, `findAllDifferences`); the only difference is whether they start the session or answer it.
+Both sides share helper routines (`buildFilter`, `partition`, `ribltFrom`, `findAllDifferences`). The only difference is whether they start the session or answer it.
 
-### Transport contract (Flow-based)
+### Transport contract (Flow transformers)
 
-The transport is expressed as a set of Flow transformers: callers supply a stream of outbound messages and receive a stream of responses. Returning a Flow keeps the API non-blocking without extra suspension points.
+The Rust reference runs both replicas inside one process; in Synk the peers live on different machines. We express the network as Flow transformers that implement the same three message channels used in the Rust code: the Bloom handshake, the rateless sketch, and the actual decompositions.
 
 ```kotlin
 interface ConflictSyncTransport {
@@ -151,50 +149,57 @@ interface ConflictSyncTransport {
 }
 ```
 
-Typical implementations back these functions with WebSockets, HTTP streams, or BLE sessions. Each function represents a two-way exchange channel:
+- `bloom` mirrors steps 1–3 in `bloomriblthashes.rs`. The initiator supplies a flow containing its Bloom filter; the responder consumes it and returns a flow with its Bloom response.
+- `rateless` mirrors steps 4–6. The responder hashes the “probably common” decompositions, streams rateless symbols, and the initiator collects them to drive `findAllDifferences`.
+- `decompositions` mirrors steps 7–8. The initiator sends snapshots, field blocks, and hash requests; the responder responds with hash matches and its own field payloads.
 
-- `bloom` handles the initial Bloom filter handshake.
-- `rateless` streams the coded symbols that let both sides peel hash differences.
-- `decompositions` carries the heavier payloads (`Snapshot`, `Field`, `HashRequest`, `HashResponse`).
+Typical implementations back these functions with WebSockets, HTTP streaming, or BLE sessions. Flows give us back-pressure and cancellation for free while keeping the interface symmetric for initiator and responder.
 
-On the initiator the session driver builds finite flows for each stage and collects the responses sequentially. On the responder the functions simply map incoming flows to outgoing responses (for example, by using `flatMapConcat` or `channelFlow`).
-
-`TransportEnvelope` remains the union of decomposition-related payloads:
+All envelopes are serializable:
 
 ```kotlin
+@Serializable
 sealed interface TransportEnvelope {
+    @Serializable
     data class Snapshot(val payload: SnapshotBlock) : TransportEnvelope
+
+    @Serializable
     data class Field(val payload: FieldBlock) : TransportEnvelope
+
+    @Serializable
     data class HashRequest(val hashes: List<Long>) : TransportEnvelope
+
+    @Serializable
     data class HashResponse(val fields: List<FieldDecomposition>) : TransportEnvelope
 }
 ```
 
-The Flow-based design lets us keep the sequential nature of the Rust benchmark while presenting an API that works for independent processes.
+### Sync choreography
 
-## Sync choreography
+The numbered steps from `bloomriblthashes.rs` map directly onto the initiator/responder interaction:
 
-The control flow mirrors the numbered comments in `bloomriblthashes.rs`, but the responsibilities are split between initiator and responder.
+1. **Initiator Bloom (Rust step 1).** Initiator builds `local_filter` from `local.split()` and calls `transport.bloom(flowOf(localPayload))`. Tracker records metadata upload.
+2. **Responder partition (Rust step 2).** Responder partitions its decompositions into `(remote_common, local_unknown)` using the received Bloom filter.
+3. **Responder Bloom (Rust step 3).** Responder sends its own Bloom filter for `remote_common` through the returned Bloom flow.
+4. **Responder rateless (Rust step 4).** Responder hashes `remote_common`, seeds a `RatelessIBLT`, and streams the sketch via `transport.rateless`.
+5. **Initiator partition (Rust step 5).** Initiator partitions `local_decompositions` using `remote_filter`, obtaining `(local_common, remote_unknown)`.
+6. **Initiator rateless (Rust step 6).** Initiator hashes `local_common`, runs `findAllDifferences`, and derives `local_only`/`remote_only` sets.
+7. **Initiator decompositions (Rust step 7).** Initiator calls `transport.decompositions` with a flow that emits:
+   - `Snapshot` blocks for every missing object in `remote_unknown`.
+   - `Field` blocks for per-field deltas and Bloom false positives (`local_only`).
+   - A single `HashRequest(remote_only_hashes)`.
+8. **Responder decompositions (Rust step 8).** Responder applies incoming payloads, resolves requested hashes via `remote_hashes`, and responds with `HashResponse` blocks.
+9. **Join (Rust step 9).** Each side joins the appropriate deltas into its local state.
+10. **Tracker finish (Rust step 10).** Both sides call `tracker.finish(falseMatches)` using the Kotlin `Measure` implementation.
 
-1. **Initiator Bloom.** Initiator computes `localDecompositions = local.split()` and sends a single-element flow through `transport.bloom`. It then collects the responder’s Bloom filter from the returned flow.
-2. **Responder partition.** Responder receives the Bloom filter, partitions `remote.split()` into `(remoteCommon, localUnknown)`, and sends back its own Bloom filter plus metadata needed for rateless decoding.
-3. **Responder rateless.** Responder hashes `remoteCommon`, seeds a `RatelessIBLT`, and streams the sketch by calling `transport.rateless`. Initiator collects the sketch.
-4. **Initiator partition + rateless.** Initiator partitions its decompositions using the responder’s Bloom filter, builds its own hash map/IBLT, and calls `findAllDifferences`. It now knows `remoteOnlyHashes` to request and `localOnly` items to send immediately.
-5. **Initiator decompositions.** Initiator opens `transport.decompositions` with a flow that emits:
-   - snapshots for missing objects,
-   - field blocks for per-field deltas and Bloom false positives,
-   - one `HashRequest` containing any `remoteOnlyHashes`.
-6. **Responder decompositions.** Responder collects that flow, applies incoming snapshots/fields, looks up the requested hashes in `remoteHashes`, and responds by returning a `HashResponse` flow from the `decompositions` call.
-7. **Initiator finish.** Initiator merges the `HashResponse`, applies all received decompositions locally, and calls `tracker.finish(falseMatches)`.
-8. **Responder finish.** After replying to the `HashRequest`, responder also calls `join(localUnknown + localOnly)` and performs its tracker checks.
-
-Every step stays deterministic because both sides hash the same `FieldFingerprint` bytes. No cache outlives the stage that needs it.
+Every stage is deterministic because both sides hash the same `FieldFingerprint` bytes. No cache outlives the stage that needs it.
 
 ## Payloads
 
-All payloads live in `:synk` so application code can depend on a single model.
+All transport payloads are serializable data classes stored in `:synk`.
 
 ```kotlin
+@Serializable
 data class BloomFilterPayload(
     val namespace: String,
     val bits: ByteArray,
@@ -202,12 +207,15 @@ data class BloomFilterPayload(
     val hashSeed2: Long
 )
 
+@Serializable
 data class RatelessSketchPayload(
     val namespace: String,
     val symbols: List<RatelessSymbol>
 )
 
+@Serializable
 sealed class DecompositionBlock {
+    @Serializable
     data class SnapshotBlock(
         val namespace: String,
         val objectKey: ObjectKey,
@@ -215,14 +223,22 @@ sealed class DecompositionBlock {
         val fields: List<FieldDecomposition>
     ) : DecompositionBlock()
 
+    @Serializable
     data class FieldBlock(
         val namespace: String,
         val field: FieldDecomposition
     ) : DecompositionBlock()
 }
+
+@Serializable
+data class RatelessSymbol(
+    val keySum: Long,
+    val valueSum: Long,
+    val count: Long
+)
 ```
 
-`RatelessSymbol` matches the Rust layout `(key_sum: u64, value_sum: u64, count: i64)` serialized little-endian. `SnapshotBlock` satisfies the “ship complete objects that are missing on one replica” requirement by bundling the encoded object alongside its field decompositions so the receiver can seed the metastore accurately.
+`RatelessSymbol` mirrors the Rust `(key_sum: u64, value_sum: u64, count: i64)` layout. `SnapshotBlock` satisfies the “ship complete objects that are missing on one replica” requirement by bundling the encoded object alongside its field decompositions so the receiver can seed the metastore accurately.
 
 ## Integration with Synk
 
@@ -243,4 +259,4 @@ Conflict Sync runs as a linear coroutine pipeline. If the transport fails mid-se
 - Hash algorithm defaults to `xxHash64`; switching requires updating both peers and the `fingerprintEncoder`.
 - Rateless sketch size grows until `findAllDifferences` succeeds. Producers typically emit symbols in small batches (e.g. 32 at a time) to keep the Flow responsive while matching Rust’s semantics.
 
-The resulting design is a faithful translation of the Rust `BloomRibltHashes` strategy, adapted to a real-world `ConflictSync` API that separates initiator and responder roles while staying simple and reliable.
+The resulting design is a faithful translation of the Rust `BloomRibltHashes` strategy, adapted to a two-sided `ConflictSync` API that separates initiator and responder roles, mirrors the original step sequence, and serializes every transport payload with Kotlin Serialization.
