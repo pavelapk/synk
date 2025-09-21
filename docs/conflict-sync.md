@@ -1,177 +1,219 @@
 # Conflict Sync
 
-Conflict Sync reconciles two Synk replicas that may have diverged while operating offline. The protocol couples Synk's per-field HLC metadata with probabilistic diffing so that the peers exchange only the data that is strictly necessary. The sequence is deliberately linear—no speculative branches, no hidden state—so implementations remain “crowbar simple” while still scaling to large datasets and unreliable networks.
+Conflict Sync is Synk's reconciliation engine. It mirrors the working Bloom+Rateless implementation that lives in the Rust reference repository at `/mnt/c/Users/user/IdeaProjects/conflict-sync/src/sync/bloomriblthashes.rs`. This document translates that algorithm to Kotlin, explains the data model planned in the `:synk` module, and shows how the transport contract fits around it. The goal is a simple, reliable implementation that exchanges only the necessary pieces of state.
 
-The high-level flow repeats three passes until both replicas converge:
+## Terminology borrowed from the Rust engine
 
-1. Stream object summaries to learn which records exist on each side.
-2. Ship complete snapshots for objects that are missing on one replica.
-3. For the remaining objects, reconcile only the fields that actually changed.
+- **Namespace** – Synk’s stable identifier for a CRDT type. In practice it is the fully qualified Kotlin class name registered with `SynkAdapterStore`. Each sync session runs inside exactly one namespace so both peers can resolve the same adapter and metastore.
+- **ObjectKey** – a pair `(namespace, id)` produced by the adapter’s `resolveId`. It uniquely names a CRDT object inside a namespace.
+- **Join decomposition (`split`)** – the minimal CRDT fragment that travels over the wire. The Rust engine calls `Decompose::split()` to obtain these fragments and `join()` to apply them; the Kotlin port mirrors those calls.
+- **`Decompose` / `Extract` / `Measure`** – trait trio that exposes `split`, `join`, a deterministic projection `extract()` used for hashing, and a lightweight size estimator. The Kotlin equivalents stay 1:1 so the Bloom and RIBLT logic can remain generic.
+- **`BloomFilter`** – probabilistic membership structure sized using the configured false-positive rate `fpr` (`0.0 < fpr < 1.0`). Filters are serialized as raw bits plus the two hash seeds that keep hashing consistent across peers.
+- **`RatelessIBLT`** – an invertible Bloom lookup table that streams `Symbol` values until both sides peel the set difference. Each coded symbol occupies `sizeof(u64) + sizeof(u64) + sizeof(i64)` bytes in Rust (`CODED_SYMBOL_SIZE`), and the Kotlin port preserves that shape.
+- **`local_unknown` / `remote_unknown`** – decompositions that the Bloom filters classify as “definitely missing” on one side. These are sent as full payloads, including complete objects when a replica lacks every field for that object.
 
-Each pass runs in order. If either peer drops off the network, the current sync is aborted and both replicas start over from stage 1 on the next attempt.
+## Kotlin surface area
 
-## Goals
+The Kotlin port keeps the Rust structure but maps it onto Synk adapters, the metastore, and typed payloads.
 
-- **Simplicity and clarity.** Every payload corresponds to a Kotlin data structure and the control flow is a straight, well-documented pipeline.
-- **Scalability.** Summaries and field catalogs are streamed in bounded chunks; large datasets never require a full in-memory materialisation.
-- **Resilience to weak networks.** Bloom filters and rateless set reconciliation avoid fixed numbers of roundtrips, so retries after a disconnect reprocess only lightweight summaries before reaching the deltas again.
-
-## Terms and Data Model
-
-### Keys
-
-- `ObjectKey(namespace: String, id: String)` uniquely identifies a CRDT record.
-- `FieldKey(object: ObjectKey, field: String)` identifies an individual property within that record.
-
-### Field versions
-
-- `FieldDigest = xxHash64(namespace || id || field || valueDigest || hlc)`. The `valueDigest` is the Synk adapter's canonical hash of the encoded value.
-- `FieldVersion(field: String, hlc: Hlc, digest: Long)` captures the latest known version for one field.
-- `ObjectSummary(key: ObjectKey, objectDigest: Long, fieldCount: Int)` is a compact descriptor for an object. `objectDigest` is derived from the sorted list of `FieldDigest`s.
-
-We refer to the ordered list of `ObjectSummary`s as the **inventory**. It is the authoritative record of which objects a replica currently knows about.
-
-### Payloads
-
-- `SnapshotPayload(key: ObjectKey, encodedObject: ByteArray, fieldVersions: List<FieldVersion>)` transports a full object together with the causal metadata for each field. The `fieldVersions` list is not redundant: the encoded object carries only domain values, while the array provides the sender's HLCs and digests so the receiver can seed its MetaStore precisely for the next merge.
-- `BlockPayload(fieldKey: FieldKey, encodedValue: ByteArray, hlc: Hlc)` transports one field for incremental updates.
-- `SummaryBloom` and `FieldBloom` are Bloom filters constructed over object digests and field digests respectively. They are sent ahead of heavier payloads to filter obvious matches.
-- `RatelessSymbol` is the unit exchanged by the rateless Invertible Bloom Lookup Table (IBLT) duet. Given enough symbols, the peers recover the set difference without agreeing on a fixed number of rounds.
-
-## Components
-
-### StateSource
-
-`StateSource<T>` is the read-side gateway into application data:
-
-1. `scan(after: ObjectKey?, limit: Int)` streams objects in deterministic `(namespace, id)` order without loading the entire dataset.
-2. `byId(id: String)` retrieves the current version of a record when the protocol is about to send a snapshot or confirm an inbound merge.
-3. Implementations may optionally expose estimation metadata (counts, approximate byte sizes) to guide chunk sizes.
-
-### InventoryBuilder
-
-For each object emitted by `StateSource.scan`, the builder:
-
-1. Serializes the object with the registered Synk adapter to obtain canonical field encodings.
-2. Reads the per-field HLCs from the Synk MetaStore.
-3. Computes `FieldVersion`s and the resulting `ObjectSummary`.
-4. Caches both the summary and the field catalog in memory for the rest of the run.
-
-Because the cache only holds the objects in flight, the builder's working set stays flat even when scanning millions of rows.
-
-### CatalogStore
-
-The catalog keeps the field metadata and encoded blocks derived during the inventory pass. The data lives in memory for the lifetime of the sync, so later stages can look up `FieldVersion`s and `BlockPayload`s without re-reading or re-serializing objects from the primary database.
-
-### MergeHandler
-
-`MergeHandler<T>` persists reconciled objects. Conflict Sync batches calls and invokes `Synk.inbound` before handing the winning value to the handler so causality is respected.
-
-### ConflictSyncTransport
-
-Applications supply their networking implementation through this interface. The contract has three responsibilities:
-
-- **Summary channel.** Exchange Bloom filters and rateless symbols for object inventories.
-- **Snapshot channel.** Stream missing objects.
-- **Field channel.** Exchange field-level Bloom filters, rateless symbols, and block payloads.
-
-Every endpoint is idempotent; senders include stable object keys so receivers can de-duplicate.
-
-### SyncStats
-
-`SyncStats` aggregates high-level counters (objects scanned, Bloom false positives, snapshots sent, rateless symbols exchanged, and total bytes per channel). These numbers drive tuning for chunk sizes, filter density, and redundancy factors.
-
-## Protocol Walkthrough
-
-Terminology: Replica **A** starts the session, replica **B** responds. The flow, however, is symmetric—each stage runs in both directions.
-
-### Stage 0 – Handshake
-
-1. A calls `openSession` with its preferred chunk size, Bloom parameters, and the latest inventory estimates.
-2. B responds with its own preferences; both sides stabilise on the negotiated parameters for this run.
-3. Each replica sets up its in-memory catalog cache so subsequent stages can reuse encoded data without touching the primary database again.
-
-### Stage 1 – Summary discovery
-
-1. A streams up to `N` `ObjectSummary`s starting after its in-memory `summaryCursor`. Before shipping them, it hashes the digests into a `SummaryBloom`.
-2. B intersects the Bloom filter with its own inventory to quickly classify most objects as “already known by A”. Only the ambiguous digests proceed to rateless reconciliation.
-3. Both sides seed an IBLT with the ambiguous digests and exchange `RatelessSymbol`s until the decoder yields `missingOnA` and `missingOnB`.
-4. B responds with an acknowledgement containing the decoded difference and its new cursor hint. A updates its in-memory `summaryCursor` and proceeds to the next chunk.
-5. Once A reaches the end of its inventory, B mirrors the process so it can learn about records that only exist on A.
-
-Because the Bloom filter removes most matches upfront, the rateless exchange typically carries only the novel digests. The complexity stays sub-linear even as the dataset grows.
-
-### Stage 2 – Snapshot hydration
-
-1. For every `ObjectKey` listed in `missingOnPeer`, the sender reads the cached `SnapshotPayload` from the catalog store.
-2. Snapshots are streamed in deterministic order. Receivers apply them through `Synk.inbound`, then persist the resolved object with `MergeHandler`.
-3. After each acknowledged batch the sender advances its in-memory `snapshotCursor`. If the transport disconnects, the next run restarts from stage 1 and rebuilds the cursor.
-
-Objects that were missing on one side never proceed to field-level reconciliation—they are always hydrated in full.
-
-### Stage 3 – Field catalog exchange
-
-1. Remaining divergent objects (those whose summaries differ on both replicas) move to the field stage.
-2. For each object, A loads the cached list of `FieldVersion`s from the catalog and hashes them into a `FieldBloom`.
-3. B tests its own field digests against `FieldBloom`. Most equal fields are eliminated here. The ambiguous set is passed to a per-object IBLT exchange to reveal precise differences. The process is symmetric.
-4. Once decoding finishes, both sides know which fields are stale locally and which ones the peer expects.
-
-### Stage 4 – Block transfer
-
-1. For every field the peer lacks—or where the peer advertises a lower HLC—the sender fetches the corresponding `BlockPayload` from the catalog store.
-2. Blocks are streamed in ascending `(namespace, id, field)` order. Receivers call `Synk.inbound` for each block and stage the object until every expected field arrives.
-3. After emitting all blocks for an object, the sender updates its in-memory `fieldCursor` so the next chunk can continue without re-sending earlier entries.
-4. When both replicas recompute matching `ObjectSummary`s for the object, it leaves the divergent set.
-
-### Stage 5 – Completion
-
-1. When no missing objects and no divergent fields remain, both replicas exchange a `SessionComplete` message containing their final `SyncStats`.
-2. Each side drops the in-memory catalogs to reclaim storage.
-
-## Meeting the goals
-
-- **Simple control flow.** The algorithm is a linear pipeline with explicit checkpoints. Every transformation remains visible through the in-memory catalog and transport messages.
-- **Scalable diffing.** Bloom filters remove the bulk of matches before rateless decoding kicks in, so bandwidth consumption is proportional to the actual differences, not to the size of the dataset.
-- **Network resilience.** Chunks stay small and idempotent. If the connection drops, the next sync restarts cleanly and quickly rebuilds the lightweight summaries before progressing to the remaining deltas.
-
-## Example wiring
+### Decompose, Extract, Measure
 
 ```kotlin
-val customerSource = object : StateSource<Customer> {
-    override suspend fun scan(after: ObjectKey?, limit: Int): List<Customer> =
-        customerDao.fetchPage(after = after, limit = limit)
-
-    override suspend fun byId(id: String): Customer? =
-        customerDao.findById(id)
+interface Decompose<Decomposition> {
+    fun split(): List<Decomposition>
+    fun join(deltas: List<Decomposition>)
 }
 
-val customerMergeHandler = MergeHandler<Customer> { namespace, customer ->
-    customerDao.upsert(customer)
+interface Extract<Item> {
+    fun extract(): Item
 }
 
-val synk = Synk.Builder(storageConfig())
-    .registerSynkAdapter(CustomerAdapter())
-    .registerStateSource(Customer::class, customerSource)
-    .onMerged(Customer::class, customerMergeHandler)
-    .build()
-
-val stats = synk.conflictSync(
-    namespace = Customer::class,
-    transport = transport
-)
+interface Measure {
+    fun sizeOf(): Int
+    fun falseMatches(other: Measure): Int
+}
 ```
 
-The transport may be anything from HTTP with long-polling to WebSockets or BLE, provided it can stream the three channels described above.
+### Field decomposition and hashing
 
-## Thought experiments
+A field decomposition carries the minimum data required to merge one field on the remote peer. The `extract()` projection feeds both the Bloom filter and the rateless IBLT. Instead of concatenating strings by hand, we hash a canonical binary fingerprint produced by the encoder so that Kotlin and Rust agree on the hash input even if object keys evolve.
 
-- **Sparse divergence.** Two replicas differ in only ten out of 50 000 objects. Bloom filters immediately classify the rest as matches. Rateless decoding converges after a handful of symbols, so the bandwidth largely comprises the ten snapshots or field blocks that truly changed.
-- **Hotspot during sync.** While a sync is in progress, a user edits a record on replica B. The HLC increases, so if the record was processed earlier the change will show up in the next session; if it happens mid-session, the field stage treats it like any other divergence and applies the newer block.
-- **Unreliable network.** A device loses connectivity after sending half the field catalog. On the next attempt it restarts from stage 1; the lightweight summary pass quickly rebuilds context before deltas flow again.
-- **Large object.** An object contains hundreds of fields. The field Bloom removes most matches. Only a few field digests flow through the rateless exchange, so the bandwidth remains manageable.
+```kotlin
+@JvmInline
+value class FieldFingerprint(val bytes: ByteArray)
 
-## Trade-offs and open questions
+data class FieldDecomposition(
+    val namespace: String,
+    val objectKey: ObjectKey,
+    val field: String,
+    val encodedValue: ByteArray,
+    val hlc: Hlc,
+) : Extract<FieldFingerprint>, Measure {
+    override fun extract(): FieldFingerprint = FieldFingerprint(
+        fingerprintEncoder(namespace, objectKey, field, encodedValue, hlc)
+    )
 
-- Field catalogs copy the encoded value into the in-memory catalog. This avoids rereading from the primary database but increases temporary memory usage during the session.
-- Bloom parameters need tuning. Extremely small filters increase false positives and therefore rateless work; extremely large filters cost bandwidth on their own.
-- A dropped connection restarts the entire flow, so multi-namespace orchestration must decide whether to retry immediately or batch retries to reduce churn.
+    override fun sizeOf(): Int = encodedValue.size + METADATA_BYTES
+
+    override fun falseMatches(other: Measure): Int = when (other) {
+        is FieldDecomposition -> if (objectKey == other.objectKey && field == other.field) 0 else 1
+        else -> 1
+    }
+}
+```
+
+`fingerprintEncoder` produces a deterministic byte array (for example, via `Buffer.pack` with little-endian ordering) that already includes the namespace, object identifier, field name, encoded value digest, and HLC tick. The actual digest used in Bloom/RIBLT structures is `xxHash64(fieldFingerprint.bytes)`, matching the `RandomState::hash_one` call in Rust. If we ever swap hash functions, both peers change the implementation simultaneously.
+
+### Replica state
+
+`ReplicaState` is strongly typed. A sync run is launched per namespace, so both peers know which Kotlin data class they are working with.
+
+```kotlin
+class ReplicaState<T : Any>(
+    private val namespace: String,
+    private val source: StateSource<T>,
+    private val adapter: SynkAdapter<T>,
+    private val metaStore: MetaStore,
+) : Decompose<FieldDecomposition> {
+    override fun split(): List<FieldDecomposition> =
+        source.snapshot().flatMap { obj ->
+            val objectId = adapter.resolveId(obj)
+            val objectKey = ObjectKey(namespace, objectId)
+            val encodedFields = adapter.encodeToFields(obj) // stable per-field bytes
+            val hlcCatalog = metaStore.readFields(objectId)
+
+            encodedFields.map { field ->
+                FieldDecomposition(
+                    namespace = namespace,
+                    objectKey = objectKey,
+                    field = field.name,
+                    encodedValue = field.bytes,
+                    hlc = hlcCatalog[field.name] ?: Hlc.zero
+                )
+            }
+        }
+
+    override fun join(deltas: List<FieldDecomposition>) = deltas.forEach { delta ->
+        Synk.inbound(namespace, delta, metaStore)
+    }
+}
+```
+
+`StateSource.snapshot()` stands in for whichever streaming API we expose (batching via `scan`, Flow-backed cursor, etc.). `encodeToFields` is the Synk serializer that yields per-field binary encodings, and `readFields` retrieves stored HLC metadata. Remote peers resolve the same adapter via `namespace` before applying incoming deltas, guaranteeing type safety throughout the session.
+
+### Session driver
+
+`BloomRibltHashes` remains the single entry point, with the same numbered steps as the Rust code and typed state/transport inputs.
+
+```kotlin
+class BloomRibltHashes<T : Any>(
+    private val fpr: Double,
+    private val hasher: Hasher64 = Hasher64.xxHash64()
+) {
+    suspend fun sync(
+        local: ReplicaState<T>,
+        remote: ReplicaState<T>,
+        transport: ConflictSyncTransport,
+        tracker: ConflictSyncTracker
+    ) { /* mirrors the Rust steps */ }
+}
+```
+
+The implementation constructs Bloom filters, partitions decompositions, runs the rateless exchange, and calls `join` exactly as the reference does. The driver never caches beyond the working collections required by the algorithm.
+
+### Transport contract (Flow-based)
+
+To align with Kotlin-first transports we expose a Flow-based API. Each side collects inbound messages while emitting outbound messages into the same abstraction. Back-pressure and cancellation naturally propagate through coroutines.
+
+```kotlin
+interface ConflictSyncTransport {
+    val inbound: Flow<TransportEnvelope>
+    suspend fun emit(message: TransportEnvelope)
+}
+
+sealed interface TransportEnvelope {
+    data class Bloom(val payload: BloomFilterPayload) : TransportEnvelope
+    data class Rateless(val payload: RatelessSketchPayload) : TransportEnvelope
+    data class Snapshot(val payload: SnapshotBlock) : TransportEnvelope
+    data class Field(val payload: FieldBlock) : TransportEnvelope
+    data class HashRequest(val hashes: List<Long>) : TransportEnvelope
+    data class HashResponse(val fields: List<FieldDecomposition>) : TransportEnvelope
+}
+```
+
+Callers typically back the transport with channels or persistent connections. The session driver consumes `inbound` in order, emits `Bloom` followed by `Rateless` and decomposition envelopes, and waits for the corresponding responses. This matches the sequential flow of the Rust algorithm while keeping the implementation streaming-friendly.
+
+## Sync choreography
+
+The control flow mirrors the numbered comments in `bloomriblthashes.rs`.
+
+1. **Local filter.** Local replica computes `localDecompositions = local.split()` and builds `localFilter = BloomFilter(localDecompositions, fpr)`. It emits a `Bloom` envelope that includes namespace metadata.
+2. **Remote partition.** Remote partitions `remote.split()` using `localFilter`, yielding `(remoteCommon, localUnknown)`. `localUnknown` is staged for `Snapshot` or `Field` envelopes depending on whether a whole object is missing.
+3. **Remote filter.** Remote builds `remoteFilter = BloomFilter(remoteCommon, fpr)`, hashes each decomposition using `hasher.hash(fieldFingerprint.bytes)`, stores them in `remoteHashes: HashMap<Long, FieldDecomposition>`, and seeds a `RatelessIBLT` with the hash set.
+4. **Remote metadata.** Remote emits `Bloom(remoteFilter)` and a `Rateless` envelope that streams the coded symbols (`sketch_size * CODED_SYMBOL_SIZE`).
+5. **Local partition.** Local partitions its decompositions using `remoteFilter`, yielding `(localCommon, remoteUnknown)`. `remoteUnknown` becomes the payload to send immediately after the rateless exchange finishes.
+6. **Local rateless.** Local builds `localHashes` and `localIBLT`, then calls `localIBLT.findAllDifferences(remoteIBLT)`. The call returns `localOnlyHashes` and `remoteOnlyHashes`.
+7. **Local payload.** Local emits envelopes for:
+   - every `remoteUnknown` decomposition, folding them into `Snapshot` blocks when all fields of an object are missing,
+   - the decompositions that correspond to `localOnlyHashes` (false positives),
+   - a `HashRequest(remoteOnlyHashes)` asking the remote peer to return the missing decompositions.
+8. **Remote response.** Remote resolves `remoteOnlyHashes` via `remoteHashes` and emits a matching `HashResponse` with the requested decompositions.
+9. **Join.** Remote calls `join(localUnknown + localOnly)` and local calls `join(remoteUnknown + remoteOnly)`; both replicas converge.
+10. **Tracker finish.** The driver calls `tracker.finish(falseMatches)` using the Kotlin `Measure` logic, giving parity with the Rust telemetry.
+
+Every step is deterministic: we hash the same canonical fingerprint and we discard decompositions as soon as they are sent or applied.
+
+## Payloads
+
+All payloads live in `:synk` so application code can depend on a single model.
+
+```kotlin
+data class BloomFilterPayload(
+    val namespace: String,
+    val bits: ByteArray,
+    val hashSeed1: Long,
+    val hashSeed2: Long
+)
+
+data class RatelessSketchPayload(
+    val namespace: String,
+    val symbols: List<RatelessSymbol>
+)
+
+sealed class DecompositionBlock {
+    data class SnapshotBlock(
+        val namespace: String,
+        val objectKey: ObjectKey,
+        val encodedObject: ByteArray,
+        val fields: List<FieldDecomposition>
+    ) : DecompositionBlock()
+
+    data class FieldBlock(
+        val namespace: String,
+        val field: FieldDecomposition
+    ) : DecompositionBlock()
+}
+```
+
+`RatelessSymbol` matches the Rust layout `(key_sum: u64, value_sum: u64, count: i64)` serialized little-endian. `SnapshotBlock` satisfies the “ship complete objects that are missing on one replica” requirement by bundling the encoded object alongside its field decompositions so the receiver can seed the metastore accurately.
+
+## Integration with Synk
+
+- **Building decompositions.** Each `SynkAdapter<T>` already knows how to serialize its Kotlin data class and read `Meta` entries from the `MetaStore`. `split()` leverages that infrastructure to produce `FieldDecomposition`s with their HLCs and fingerprints.
+- **Shipping missing objects.** When `remoteUnknown` or `localUnknown` covers every field of an object we emit a single `Snapshot` envelope. Receiving peers call the adapter’s `decode` before joining the individual field decompositions to populate metadata.
+- **Applying inbound state.** `join` delegates to `Synk.inbound(namespace, …)` so existing merge semantics remain intact. Field-level merges perform HLC comparison before writing.
+- **Transport plumbing.** The Flow-based transport lets applications bridge HTTP streaming, WebSockets, BLE, or any bidirectional medium simply by exposing a Flow and coroutine send primitive.
+- **No extra caches.** The algorithm only holds `BloomFilter`, `RatelessIBLT`, and the hash map required to resolve false positives. Everything else streams through.
+- **Tracker hooks.** `ConflictSyncTracker` mirrors the Rust `DefaultTracker`. Production builds can swap in a no-op tracker while tests assert the same telemetry as the reference implementation.
+
+## Failure and restart behaviour
+
+Conflict Sync runs as a linear coroutine pipeline. If the transport fails mid-session we cancel the coroutine, drop transient state, and restart from step 1 on the next attempt. Because every envelope carries namespace, object key, and field fingerprint, replays are idempotent.
+
+## Tunables
+
+- `fpr` defaults to `0.01` (1% false-positive rate), matching the Rust default. Lower values grow Bloom filters but reduce false positives and follow-up payloads.
+- Hash algorithm defaults to `xxHash64`; switching requires updating both peers and the `fingerprintEncoder`.
+- Rateless sketch size grows until `findAllDifferences` succeeds. Producers typically emit symbols in small batches (e.g. 32 at a time) to keep the Flow responsive while matching Rust’s semantics.
+
+The resulting design is a faithful translation of the Rust `BloomRibltHashes` strategy, adapted to Kotlin and Synk’s data model while staying simple and reliable.
