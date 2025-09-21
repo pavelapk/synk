@@ -153,6 +153,8 @@ interface ConflictSyncTransport {
 - `rateless` mirrors steps 4–6. The responder hashes the “probably common” decompositions, streams rateless symbols, and the initiator collects them to drive `findAllDifferences`.
 - `decompositions` mirrors steps 7–8. The initiator sends snapshots, field blocks, and hash requests; the responder responds with hash matches and its own field payloads.
 
+All three methods return the same payload type they accept because each channel is bidirectional but exchanges the same shape of message on both sides. For example, both peers send `BloomFilterPayload`s during the Bloom handshake (first the initiator’s filter, then the responder’s filter), and both sides transmit `RatelessSketchPayload`s while streaming coded symbols. The decomposition channel uses a shared `TransportEnvelope` so either endpoint can emit `Field` blocks; conventionally the initiator sends `Snapshot`, `Field`, and `HashRequest` envelopes, while the responder replies with `Field` and `HashResponse` envelopes.
+
 Typical implementations back these functions with WebSockets, HTTP streaming, or BLE sessions. Flows give us back-pressure and cancellation for free while keeping the interface symmetric for initiator and responder.
 
 All envelopes are serializable:
