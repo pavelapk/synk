@@ -1,6 +1,10 @@
 package com.tap.synk.conflict
 
 import kotlin.time.TimeSource
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.TimeZone
 
 object ConflictSyncLogger {
 
@@ -47,12 +51,17 @@ object ConflictSyncLogger {
         }
     }
 
-    private fun format(role: Role, message: String): String =
-        "[Synk][ConflictSync] ${role.emoji} ${role.label.padEnd(9)} | $message"
+    private fun format(role: Role, message: String): String {
+        return "[Synk][ConflictSync] ${role.emoji} ${role.label.padEnd(9)} | $message"
+    }
 
+    @OptIn(ExperimentalTime::class)
     private fun printlnRow(left: String?, right: String?) {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val datetime = now.toString().replace('T', ' ').take(23)
+
         val leftColumn = (left ?: "").padEnd(LEFT_COLUMN_WIDTH)
         val rightColumn = right ?: ""
-        println(leftColumn + rightColumn)
+        println("$datetime $leftColumn$rightColumn")
     }
 }
