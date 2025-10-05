@@ -93,8 +93,8 @@ interface SyncTracker {
 data class SyncStats(
     val adapterKey: String,
     val scanned: Int,
-    val outbound: List<SyncEnvelope>,
-    val inbound: List<SyncEnvelope>,
+    val outbound: List<SyncRequest>,
+    val inbound: List<SyncResponse>,
     val falseMatches: Int,
 )
 ```
@@ -112,20 +112,34 @@ data class SyncStats(
 
 ```kotlin
 @Serializable
-data class SyncEnvelope(
+sealed interface SyncPayload {
+    @Serializable
+    data class Json(val body: JsonElement) : SyncPayload
+
+    @Serializable
+    data class Binary(val base64: String) : SyncPayload
+}
+
+@Serializable
+data class SyncRequest(
     val channel: String,
-    val json: JsonElement? = null,
-    val binary: ByteArray? = null,
+    val payload: SyncPayload,
+)
+
+@Serializable
+data class SyncResponse(
+    val channel: String,
+    val payload: SyncPayload,
 )
 
 interface SyncTransport {
-    fun exchange(outbound: Flow<SyncEnvelope>): Flow<SyncEnvelope>
+    fun exchange(outbound: Flow<SyncRequest>): Flow<SyncResponse>
 }
 ```
 
-- `channel` is a free-form string chosen by the strategy (`"bloom"`, `"snapshot"`, `"full-state"`, etc.), so the core contract does not prescribe Bloom/IBLT semantics or impose session identifiers beyond what callers already track.
-- `json` covers the common case where strategies rely on `kotlinx.serialization` to encode structured payloads, while `binary` allows pass-through of protobuf frames, encrypted blobs, or other binary formats. Exactly one of the payload fields should be non-null.
-- `:synk` ships `SyncSerializer` helpers that map strongly typed strategy messages to `SyncEnvelope` instances and back by delegating to `kotlinx.serialization`, enforcing the one-of payload rule, and wiring a pluggable `SerializersModule` for applications.
+- `channel` is a free-form string chosen by the strategy (`"bloom"`, `"snapshot"`, `"full-state"`, etc.), so the core contract stays agnostic to any specific algorithmic phases.
+- `SyncPayload.Json` covers the common case where strategies rely on `kotlinx.serialization` to encode structured payloads, while `SyncPayload.Binary` wraps a base64 string so equality/hashCode stay well-defined without pulling `ByteArray` into a data class. Helper functions in `:synk` convert to and from raw byte arrays when needed.
+- `SyncTransport.exchange` now separates request and response flows, giving strategies clearer semantics when they expect replies (e.g., hash lookups) versus fire-and-forget messages. `:synk` ships `SyncSerializer` helpers that bind strategy-defined types to `SyncRequest`/`SyncResponse` using a pluggable `SerializersModule`.
 #### Configuration Surface
 
 `SyncConfiguration` provides a minimal core shape plus strategy-specific options:
@@ -149,7 +163,7 @@ All classes currently under `com.tap.synk.conflict` move to the new strategy mod
 
 - `ReplicaState` becomes an internal detail that implements the new `SyncReplica` contract declared in `:synk`, so other strategies can swap in alternative replica implementations without depending on Bloom-specific helpers.
 - `ConflictSyncBloomRateless` and `ConflictSyncResponder` are rewritten as `BloomRatelessInitiatorSession` and `BloomRatelessResponderSession`, both implementing `SyncSession<T>`.
-- Existing payload types (`BloomFilterPayload`, `RatelessSketchPayload`, `DecompositionBlock`, etc.) migrate into the strategy module and serialize through the shared `SyncEnvelope` helpers instead of custom transport channels.
+- Existing payload types (`BloomFilterPayload`, `RatelessSketchPayload`, `DecompositionBlock`, etc.) migrate into the strategy module and serialize through the shared `SyncRequest`/`SyncResponse` helpers instead of custom transport channels.
 ### Runtime Wiring
 
 `Synk` exposes a new API surface:
@@ -166,7 +180,7 @@ suspend fun <T : Any> Synk.sync(
 ```
 
 - Callers must explicitly choose `SyncRole` (initiator vs responder). Convenience inline functions may wrap the common initiator/responder cases but they delegate to the new API directly.
-- The prior `conflictSync`/`respondConflictSync` functions are removed. A migration guide will point integrators to the new API signatures and transport contract.
+- The prior `conflictSync`/`respondConflictSync` functions are removed. Updated README/Docs will call out the new API signatures and transport contract so integrators can adjust quickly.
 - `Synk.Builder` gains registration methods for `SyncStrategyFactory` and the rebranded `SyncStateSource`/`SyncMergeHandler`. Because compatibility is not maintained, these methods replace the existing registration DSL instead of decorating it.
 - `BloomRatelessStrategyFactory` is re-exported from `:synk` so existing callers that rely on the default behaviour continue to receive the Bloom+Rateless implementation without additional dependency declarations.
 - Fallback workflows remain application-driven: stop the active session and invoke `Synk.sync` again with a different factory whenever network conditions demand a new strategy.
@@ -184,7 +198,7 @@ suspend fun <T : Any> Synk.sync(
    - Update `Synk` and its builder DSL to register strategies, cursors, and merge handlers using the new abstractions.
 
 2. **Extract the Bloom Rateless strategy**
-   - Create `:sync:strategies:bloom-rateless`, move the existing ConflictSync code, and adapt it to the new `SyncEnvelope` transport helper.
+   - Create `:sync:strategies:bloom-rateless`, move the existing ConflictSync code, and adapt it to the new `SyncRequest`/`SyncResponse` transport helpers.
    - Replace direct references inside `:synk` with calls into `BloomRatelessStrategyFactory` via the `SyncStrategyFactory` abstraction.
 
 3. **Remove legacy APIs**
