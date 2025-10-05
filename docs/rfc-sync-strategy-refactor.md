@@ -31,26 +31,24 @@ We need to make synchronization strategies replaceable without cloning the entir
 
 ### Module Topology
 
-1. **`:sync:core` (new Kotlin Multiplatform module)**
-   - Hosts the new abstractions (`SyncStrategyFactory`, `SyncSession`, `SyncRole`, `SyncContext`, `SyncStats`, `SyncTracker`, `SyncTransport`).
-   - Depends on `:libs:annotations` for shared annotations and on targeted pieces of `:synk` (object keys, adapters, metadata contracts).
-   - Ships the default tracker implementation and shared utility contracts (e.g., paging helpers) so strategies can rely on a stable base.
+1. **`:synk` core package refresh**
+   - Houses all synchronization abstractions under a new `com.tap.synk.sync` namespace so consumers continue to depend on a single module for the public API.
+   - Refactors existing builder/registry wiring to speak in terms of the new strategy contracts while keeping adapters, metastore factories, and message types colocated.
+   - Provides default tracker implementations and serialization helpers that strategies can reuse.
 
-2. **`:sync:strategies:conflict-bloom` (new Kotlin Multiplatform module)**
-   - Depends on `:sync:core` and migrates the Bloom+Rateless implementation out of `:synk`.
-   - Contains the code currently under `com.tap.synk.conflict`, including Bloom filter utilities, rateless IBLT, transport payloads, and `ReplicaState`.
-   - Exposes a `ConflictBloomStrategyFactory` that produces initiator/responder sessions conforming to the new abstraction.
+2. **`:sync:strategies:bloom-rateless` (new Kotlin Multiplatform module)**
+   - Depends on `:synk` and migrates the Bloom+Rateless implementation out of the core module.
+   - Contains the code currently under `com.tap.synk.conflict`, including Bloom filter utilities, rateless IBLT, transport payloads, and replica helpers.
+   - Exposes a `BloomRatelessStrategyFactory` that produces initiator/responder sessions conforming to the new abstraction.
 
-3. **`:synk` adjustments**
-   - Retains ownership of `Synk`, adapter stores, and metastore wiring.
-   - Replaces the existing `conflictSync` entry points with a unified `sync` API that requires a `SyncStrategyFactory` and the new `SyncTransport` contract.
-   - Depends on `:sync:core` and declares `ConflictBloomStrategyFactory` as the default dependency, but the module no longer vendors the implementation details.
+3. **Future strategy modules (optional)**
+   - Additional strategies (for example, "send-all" or delta-based sync) can live in sibling modules (`:sync:strategies:*`) that all depend on the shared contracts inside `:synk`.
 
-`settings.gradle.kts` will include the new modules and wire them into dependency graphs so that `:synk` depends only on `:sync:core` at compile time and optionally on strategy artifacts at runtime.
+`settings.gradle.kts` only needs to register `:sync:strategies:bloom-rateless`; `:synk` remains the single entry point for consumers and continues to publish the library DSL.
 
 ### Abstractions
 
-The following interfaces are introduced in `:sync:core`:
+The following interfaces live in `:synk` under `com.tap.synk.sync`:
 
 ```kotlin
 interface SyncStrategyFactory {
@@ -68,22 +66,22 @@ interface SyncSession<T : Any> {
 }
 
 interface SyncContext<T : Any> {
-    val namespace: String
     val adapter: SynkAdapter<T>
     val stateSource: SyncStateSource<T>
     val mergeHandler: SyncMergeHandler<T>?
     val synk: Synk
     val metaStore: MetaStore
+    val adapterKey: String
     suspend fun warm()
 }
 
 interface SyncStateSource<T : Any> {
-    suspend fun scan(after: ObjectKey?, limit: Int): List<T>
-    suspend fun byId(id: String): T?
+    suspend fun scan(afterId: String?, limit: Int): List<T>
+    suspend fun load(id: String): T?
 }
 
 fun interface SyncMergeHandler<T : Any> {
-    suspend fun merge(namespace: String, value: T)
+    suspend fun merge(value: T)
 }
 
 interface SyncTracker {
@@ -93,41 +91,41 @@ interface SyncTracker {
 }
 
 data class SyncStats(
-    val namespace: String,
+    val adapterKey: String,
     val scanned: Int,
-    val outbound: List<SyncMessage>,
-    val inbound: List<SyncMessage>,
+    val outbound: List<SyncEnvelope>,
+    val inbound: List<SyncEnvelope>,
     val falseMatches: Int,
 )
 ```
 
 - `SyncStrategyFactory` replaces hard-coded driver instantiation. The `Synk.sync` entry point resolves a factory from a registry and passes the appropriate role (initiator/responder).
-- `SyncContext` adapts the existing data plumbing while renaming the interfaces to `SyncStateSource`/`SyncMergeHandler` to mark the breaking change and leave room for signature evolution.
-- `SyncTracker` and `SyncStats` move to `:sync:core`, keeping the bandwidth accounting semantics but allowing strategies to emit their own `SyncTransferEvent` subclasses.
-- `SyncTransferEvent` is introduced alongside `SyncTracker` as a sealed hierarchy that replaces `ConflictSyncEvent` and models uploads, downloads, and strategy-defined telemetry hooks.
-
+- `SyncContext` exposes `adapterKey`, derived from the registered adapter, so strategies can log/report without requiring an explicit namespace argument.
+- `SyncStateSource` reuses the existing `IDResolver` contract by paging with string identifiers, ensuring strategies can iterate deterministically without introducing new cursor types.
+- Because `SynkAdapter` already implements `IDResolver`, strategies can derive identifiers directly from registered adapters and keep pagination consistent across state sources and merge handlers.
+- `SyncMergeHandler` no longer receives a namespace parameter; handlers can capture any additional context they need when they are registered.
+- `SyncTracker`, `SyncStats`, and the new sealed `SyncTransferEvent` hierarchy reside in `:synk`, preserving the bandwidth accounting semantics while allowing strategies to emit custom telemetry.
+`SyncReplica<T>` (not shown above) encapsulates snapshot/materialisation helpers so individual strategies can decide how to split state or apply inbound envelopes without depending on Bloom-specific data types.
 #### Transport Contract
 
-Backward compatibility is not preserved, so `:sync:core` defines a new transport contract that replaces `ConflictSyncTransport`:
+`SyncTransport` remains transport-agnostic and embraces Kotlin serialization so integrators can implement networking without bespoke encoders:
 
 ```kotlin
+@Serializable
+data class SyncEnvelope(
+    val channel: String,
+    val json: JsonElement? = null,
+    val binary: ByteArray? = null,
+)
+
 interface SyncTransport {
-    fun outbound(channel: SyncChannel, payloads: Flow<SyncMessage>): Flow<SyncMessage>
-}
-
-enum class SyncChannel { BLOOM, SKETCH, PAYLOAD }
-
-sealed interface SyncMessage {
-    data class Bloom(val namespace: String, val payload: BloomPayload) : SyncMessage
-    data class Sketch(val namespace: String, val symbols: List<RatelessSymbol>) : SyncMessage
-    data class Payload(val namespace: String, val body: PayloadEnvelope) : SyncMessage
+    fun exchange(outbound: Flow<SyncEnvelope>): Flow<SyncEnvelope>
 }
 ```
 
-- A single `outbound` function replaces the three dedicated Flow transformers. Strategies multiplex messages by `SyncChannel` and interpret the `SyncMessage` envelope as needed.
-- `PayloadEnvelope` is free to evolve; the Conflict Bloom strategy migrates its existing `TransportEnvelope` structures into the new hierarchy, while other strategies can define alternative payloads.
-- Because compatibility is not a goal, integrators must adopt this transport and translate their networking layer accordingly.
-
+- `channel` is a free-form string chosen by the strategy (`"bloom"`, `"snapshot"`, `"full-state"`, etc.), so the core contract does not prescribe Bloom/IBLT semantics or impose session identifiers beyond what callers already track.
+- `json` covers the common case where strategies rely on `kotlinx.serialization` to encode structured payloads, while `binary` allows pass-through of protobuf frames, encrypted blobs, or other binary formats. Exactly one of the payload fields should be non-null.
+- `:synk` ships `SyncSerializer` helpers that map strongly typed strategy messages to `SyncEnvelope` instances and back by delegating to `kotlinx.serialization`, enforcing the one-of payload rule, and wiring a pluggable `SerializersModule` for applications.
 #### Configuration Surface
 
 `SyncConfiguration` provides a minimal core shape plus strategy-specific options:
@@ -143,16 +141,15 @@ data class SyncConfiguration(
 interface StrategyOption<T : Any>
 ```
 
-Each strategy publishes its own option keys. For example, the Conflict Bloom strategy introduces options for false-positive rate and rateless batch size and enforces defaults identical to the current implementation.
+Each strategy publishes its own option keys. For example, the Bloom Rateless strategy introduces options for false-positive rate and rateless batch size and enforces defaults identical to the current implementation.
 
 ### Default Strategy Extraction
 
-All classes currently under `com.tap.synk.conflict` move to the new strategy module with package `com.tap.synk.strategy.conflictbloom`. Key adjustments:
+All classes currently under `com.tap.synk.conflict` move to the new strategy module with package `com.tap.synk.strategy.bloomrateless`. Key adjustments:
 
-- `ReplicaState` becomes an internal detail that implements a `SyncReplica` contract defined in `:sync:core`. Other strategies can provide alternative replica implementations.
-- `ConflictSyncBloomRateless` and `ConflictSyncResponder` are rewritten as `ConflictBloomInitiatorSession` and `ConflictBloomResponderSession`, both implementing `SyncSession<T>`.
-- Transport payloads (`BloomFilterPayload`, `RatelessSketchPayload`, `DecompositionBlock`, etc.) migrate into the strategy module and adopt the new `SyncMessage.Payload` envelopes.
-
+- `ReplicaState` becomes an internal detail that implements the new `SyncReplica` contract declared in `:synk`, so other strategies can swap in alternative replica implementations without depending on Bloom-specific helpers.
+- `ConflictSyncBloomRateless` and `ConflictSyncResponder` are rewritten as `BloomRatelessInitiatorSession` and `BloomRatelessResponderSession`, both implementing `SyncSession<T>`.
+- Existing payload types (`BloomFilterPayload`, `RatelessSketchPayload`, `DecompositionBlock`, etc.) migrate into the strategy module and serialize through the shared `SyncEnvelope` helpers instead of custom transport channels.
 ### Runtime Wiring
 
 `Synk` exposes a new API surface:
@@ -162,7 +159,7 @@ suspend fun <T : Any> Synk.sync(
     namespace: KClass<T>,
     role: SyncRole,
     transport: SyncTransport,
-    strategy: SyncStrategyFactory = defaultSyncStrategy,
+    strategy: SyncStrategyFactory = BloomRatelessStrategyFactory,
     configuration: SyncConfiguration = SyncConfiguration.Default,
     tracker: SyncTracker = DefaultSyncTracker,
 ): SyncStats
@@ -171,51 +168,49 @@ suspend fun <T : Any> Synk.sync(
 - Callers must explicitly choose `SyncRole` (initiator vs responder). Convenience inline functions may wrap the common initiator/responder cases but they delegate to the new API directly.
 - The prior `conflictSync`/`respondConflictSync` functions are removed. A migration guide will point integrators to the new API signatures and transport contract.
 - `Synk.Builder` gains registration methods for `SyncStrategyFactory` and the rebranded `SyncStateSource`/`SyncMergeHandler`. Because compatibility is not maintained, these methods replace the existing registration DSL instead of decorating it.
+- `BloomRatelessStrategyFactory` is re-exported from `:synk` so existing callers that rely on the default behaviour continue to receive the Bloom+Rateless implementation without additional dependency declarations.
+- Fallback workflows remain application-driven: stop the active session and invoke `Synk.sync` again with a different factory whenever network conditions demand a new strategy.
 
 ### Testing Strategy
 
 - Promote the current ConflictSync unit tests into the new strategy module and update them to use `SyncTransport` and `SyncSession`.
-- Add contract tests inside `:sync:core` that validate the `Synk.sync` entry point with a fake strategy capturing all callbacks.
+- Add contract tests inside `:synk` that validate the `Synk.sync` entry point with a fake strategy capturing all callbacks.
 - Provide sample tests (e.g., a naive “full state” strategy) that demonstrate how strategies interact with `SyncContext` and the transport surface, giving integrators working examples to copy.
 
 ## Implementation Plan
 
-1. **Scaffold core abstractions**
-   - Create `:sync:core` with the new interfaces, transport contract, tracker implementation, and context adapters.
-   - Update `Synk` to depend on `:sync:core`, introduce the new registration DSL, and drop the legacy `ConflictSyncRegistry`.
+1. **Refactor `:synk` core**
+   - Introduce the new `com.tap.synk.sync` package, define the strategy interfaces, cursors, trackers, and serializer helpers, and replace the legacy `ConflictSyncRegistry`.
+   - Update `Synk` and its builder DSL to register strategies, cursors, and merge handlers using the new abstractions.
 
-2. **Migrate the Conflict Bloom strategy**
-   - Create `:sync:strategies:conflict-bloom` and move algorithm code over, renaming packages and adapting to the new transport.
-   - Replace direct usages inside `:synk` with calls into `ConflictBloomStrategyFactory` via the `SyncStrategyFactory` abstraction.
+2. **Extract the Bloom Rateless strategy**
+   - Create `:sync:strategies:bloom-rateless`, move the existing ConflictSync code, and adapt it to the new `SyncEnvelope` transport helper.
+   - Replace direct references inside `:synk` with calls into `BloomRatelessStrategyFactory` via the `SyncStrategyFactory` abstraction.
 
 3. **Remove legacy APIs**
    - Delete `Synk.conflictSync`, `Synk.respondConflictSync`, `ConflictSyncConfiguration`, `ConflictSyncTransport`, and related types from `:synk`.
    - Provide documentation that explains the new API shape and highlights the breaking changes.
 
 4. **Update build configuration**
-   - Register the new modules in `settings.gradle.kts`.
-   - Adjust dependency declarations (`build.gradle.kts` files) so that strategy modules depend on `:sync:core`, and `:synk` depends only on `:sync:core` plus explicitly listed strategies.
+   - Register `:sync:strategies:bloom-rateless` in `settings.gradle.kts`.
+   - Adjust dependency declarations so strategy modules depend on `:synk`, and the root publication includes the default Bloom Rateless strategy.
 
 5. **Refresh tests and CI**
-   - Port existing unit tests to the new modules and ensure they compile against the updated APIs.
-   - Add new integration tests that cover a full sync run through `Synk.sync` using the new transport contract.
-   - Update CI scripts to run tests for the additional modules.
+   - Port existing unit tests to the new module and ensure they compile against the updated APIs.
+   - Add new integration tests that cover a full sync run through `Synk.sync` using the generalized transport contract.
+   - Update CI scripts to run tests for the additional module.
 
 6. **Documentation**
-   - Revise `docs/conflict-sync.md` (or split into multiple documents) to describe the new abstractions and transport.
-   - Publish a migration guide that shows how to move from the old API to the new `SyncTransport`/`SyncStrategyFactory` model.
-
+   - Refresh `README.md` and `docs/conflict-sync.md` to describe the new public API surface and transport helpers.
+   - Note in release notes that the strategy interfaces remain experimental and may evolve, so early adopters should track changes closely.
 ## Risks & Mitigations
 
 - **Consumer migration burden:** Removing compatibility forces partner applications to update their networking layer and API calls. We mitigate by providing thorough documentation, migration examples, and sample strategies.
 - **Module graph churn:** Adding new modules and deleting old ones changes the Gradle structure. A phased rollout and CI updates in step 4 keep build stability in check.
 - **Strategy context coupling:** Exposing more of `Synk` internals through `SyncContext` risks recreating tight coupling. We document intended usage, keep the interface minimal, and enforce it via lint/tests.
-- **Transport redesign regressions:** The new `SyncTransport` may introduce bugs if not carefully validated. Integration tests and property-based tests against the migrated Conflict Bloom strategy help ensure feature parity with the current behaviour.
+- **Transport redesign regressions:** The new `SyncTransport` may introduce bugs if not carefully validated. Integration tests and property-based tests against the migrated Bloom Rateless strategy help ensure feature parity with the current behaviour.
+- **Experimental API expectations:** Strategy contracts remain explicitly experimental; communicate this status in release notes so early integrators understand that breaking changes may arrive without full deprecation cycles.
 
 ## Open Questions
 
-1. Should `SyncTransport` expose structured channels as shown, or should we move to a message bus model that allows truly arbitrary message types per strategy?
-2. Do we need a shared serialization module for transport payloads, or should each strategy define its own Kotlin serialization configuration?
-3. What is the minimum migration guidance required for existing integrators, and should we version the new API as part of a major release?
-4. Should we formalize a compatibility policy (e.g., semantic versioning) for strategy interfaces to avoid another hard break in the near future?
-5. How do we handle scenarios where multiple strategies need to coexist within the same application session (e.g., fallback strategies)?
+_None at this stage; outstanding items have documented decisions in the text above._
