@@ -4,9 +4,10 @@ import com.tap.hlc.HybridLogicalClock
 import com.tap.synk.adapter.SynkAdapter
 import com.tap.synk.adapter.store.SynkAdapterStore
 import com.tap.synk.config.ClockStorageConfiguration
-import com.tap.synk.conflict.ConflictSyncRegistry
-import com.tap.synk.conflict.MergeHandler
-import com.tap.synk.conflict.StateSource
+import com.tap.synk.sync.SyncMergeHandler
+import com.tap.synk.sync.SyncRegistry
+import com.tap.synk.sync.SyncStateSource
+import com.tap.synk.sync.SyncStrategyFactory
 import com.tap.synk.meta.store.InMemoryMetaStoreFactory
 import com.tap.synk.meta.store.MetaStoreFactory
 import com.tap.synk.relay.MessageSemigroup
@@ -28,7 +29,7 @@ class Synk internal constructor(
     val clockStorageConfiguration: ClockStorageConfiguration,
     val factory: MetaStoreFactory = InMemoryMetaStoreFactory(),
     val synkAdapterStore: SynkAdapterStore = SynkAdapterStore(),
-    internal val conflictSyncRegistry: ConflictSyncRegistry = ConflictSyncRegistry(),
+    internal val syncRegistry: SyncRegistry = SyncRegistry(),
 ) {
     internal val hlc: MutableStateFlow<HybridLogicalClock> = MutableStateFlow(loadClock())
     internal val merger: MessageSemigroup<Any> = MessageSemigroup(synkAdapterStore)
@@ -57,7 +58,7 @@ class Synk internal constructor(
         internal var synkAdapterStore = SynkAdapterStore()
 
         @PublishedApi
-        internal var conflictSyncRegistry = ConflictSyncRegistry()
+        internal var syncRegistry = SyncRegistry()
 
         inline fun <reified T : Any> registerSynkAdapter(synkAdapter: SynkAdapter<T>) = apply {
             val clazz = T::class
@@ -73,20 +74,20 @@ class Synk internal constructor(
         }
 
         @PublishedApi
-        internal fun <T : Any> registerStateSource(clazz: KClass<T>, stateSource: StateSource<T>) {
-            conflictSyncRegistry.registerStateSource(clazz, stateSource)
+        internal fun <T : Any> registerStateSource(clazz: KClass<T>, stateSource: SyncStateSource<T>) {
+            syncRegistry.registerStateSource(clazz, stateSource)
         }
 
         @PublishedApi
-        internal fun <T : Any> registerMergeHandler(clazz: KClass<T>, mergeHandler: MergeHandler<T>) {
-            conflictSyncRegistry.registerMergeHandler(clazz, mergeHandler)
+        internal fun <T : Any> registerMergeHandler(clazz: KClass<T>, mergeHandler: SyncMergeHandler<T>) {
+            syncRegistry.registerMergeHandler(clazz, mergeHandler)
         }
 
-        inline fun <reified T : Any> registerStateSource(stateSource: StateSource<T>) = apply {
+        inline fun <reified T : Any> registerStateSource(stateSource: SyncStateSource<T>) = apply {
             registerStateSource(T::class, stateSource)
         }
 
-        inline fun <reified T : Any> onMerged(mergeHandler: MergeHandler<T>) = apply {
+        inline fun <reified T : Any> onMerged(mergeHandler: SyncMergeHandler<T>) = apply {
             registerMergeHandler(T::class, mergeHandler)
         }
 
@@ -94,12 +95,16 @@ class Synk internal constructor(
             factory = metaStoreFactory
         }
 
+        fun defaultStrategy(factory: SyncStrategyFactory) = apply {
+            syncRegistry.registerDefaultStrategy(factory)
+        }
+
         fun build(): Synk {
             return Synk(
                 storageConfiguration,
                 factory ?: InMemoryMetaStoreFactory(),
                 synkAdapterStore,
-                conflictSyncRegistry,
+                syncRegistry,
             )
         }
     }

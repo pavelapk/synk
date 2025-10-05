@@ -199,19 +199,19 @@ Conflict Sync is Synk's streaming reconciliation layer. The full protocol is doc
 
 Conflict Sync needs a way to read the current state and a way to persist merges:
 
-- `StateSource` pages through your objects in deterministic order and lets the engine look them up by id when it needs to ship a snapshot or confirm a merge.
-- `MergeHandler` writes the reconciled object back to your database once `Synk.inbound` decides the winning values.
+- `SyncStateSource` pages through your objects in deterministic order and lets the engine look them up by id when it needs to ship a snapshot or confirm a merge.
+- `SyncMergeHandler` writes the reconciled object back to your database once `Synk.inbound` decides the winning values.
 
 ```kotlin
-val stateSource = object : StateSource<Customer> {
-    override suspend fun scan(after: ObjectKey?, limit: Int): List<Customer> =
-        customerDao.fetchPage(after = after, limit = limit)
+val stateSource = object : SyncStateSource<Customer> {
+    override suspend fun scan(afterId: String?, limit: Int): List<Customer> =
+        customerDao.fetchPage(afterId = afterId, limit = limit)
 
-    override suspend fun byId(id: String): Customer? =
+    override suspend fun load(id: String): Customer? =
         customerDao.findById(id)
 }
 
-val mergeHandler = MergeHandler<Customer> { namespace, customer ->
+val mergeHandler = SyncMergeHandler<Customer> { customer ->
     customerDao.upsert(customer)
 }
 
@@ -219,15 +219,17 @@ val synk = Synk.Builder(clockStorageConfig)
     .registerSynkAdapter(CustomerAdapter())
     .registerStateSource(Customer::class, stateSource)
     .onMerged(Customer::class, mergeHandler)
+    .defaultStrategy(BloomRatelessStrategyFactory)
     .build()
 
-val stats = synk.conflictSync(
+val stats = synk.sync(
     namespace = Customer::class,
+    role = SyncRole.INITIATOR,
     transport = transport,
 )
 ```
 
-`conflictSync` returns `SyncStats` so you can log how many objects were scanned, how many data crossed the wire, and how long each stage took.
+`sync` returns `SyncStats` so you can log how many objects were scanned, how much data crossed the wire, and how long each stage took.
 
 ## Serialization
 
