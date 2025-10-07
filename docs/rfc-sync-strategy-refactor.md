@@ -36,15 +36,19 @@ We need to make synchronization strategies replaceable without cloning the entir
    - Refactors existing builder/registry wiring to speak in terms of the new strategy contracts while keeping adapters, metastore factories, and message types colocated.
    - Provides default tracker implementations and serialization helpers that strategies can reuse.
 
-2. **`:sync-strategies:bloom-rateless` (new Kotlin Multiplatform module)**
+2. **`:sync-strategies:bloom-rateless` (Kotlin Multiplatform module)**
    - Depends on `:synk` and migrates the Bloom+Rateless implementation out of the core module.
    - Contains the code currently under `com.tap.synk.conflict`, including Bloom filter utilities, rateless IBLT, transport payloads, and replica helpers.
    - Exposes a `BloomRatelessStrategyFactory` that produces initiator/responder sessions conforming to the new abstraction.
 
-3. **Future strategy modules (optional)**
-   - Additional strategies (for example, "send-all" or delta-based sync) can live in sibling modules (`:sync-strategies:*`) that all depend on the shared contracts inside `:synk`.
+3. **`:sync-strategies:full-state` (Kotlin Multiplatform module)**
+   - Implements a naive "ship the whole snapshot" strategy via `FullStateStrategyFactory` for high-bandwidth fallbacks and integration tests.
+   - Demonstrates how strategies can reuse the shared abstractions without depending on Bloom-specific helpers.
 
-`settings.gradle.kts` only needs to register `:sync-strategies:bloom-rateless`; `:synk` remains the single entry point for consumers and continues to publish the library DSL.
+4. **Future strategy modules (optional)**
+   - Additional strategies (for example, delta-based sync (in addition to ConflictSync) or app-specific heuristics) can live in sibling modules (`:sync-strategies:*`) that all depend on the shared contracts inside `:synk`.
+
+`settings.gradle.kts` registers `:sync-strategies:bloom-rateless` and `:sync-strategies:full-state`; `:synk` remains the single entry point for consumers and continues to publish the library DSL.
 
 ### Abstractions
 
@@ -93,8 +97,10 @@ interface SyncTracker {
 data class SyncStats(
     val adapterKey: String,
     val scanned: Int,
-    val outbound: List<SyncRequest>,
-    val inbound: List<SyncResponse>,
+    val outboundMessages: Int,
+    val outboundBytes: Long,
+    val inboundMessages: Int,
+    val inboundBytes: Long,
     val falseMatches: Int,
 )
 ```
@@ -104,7 +110,7 @@ data class SyncStats(
 - `SyncStateSource` reuses the existing `IDResolver` contract by paging with string identifiers, ensuring strategies can iterate deterministically without introducing new cursor types.
 - Because `SynkAdapter` already implements `IDResolver`, strategies can derive identifiers directly from registered adapters and keep pagination consistent across state sources and merge handlers.
 - `SyncMergeHandler` no longer receives a namespace parameter; handlers can capture any additional context they need when they are registered.
-- `SyncTracker`, `SyncStats`, and the new sealed `SyncTransferEvent` hierarchy reside in `:synk`, preserving the bandwidth accounting semantics while allowing strategies to emit custom telemetry.
+- `SyncTracker`, `SyncStats`, and the new sealed `SyncTransferEvent` hierarchy reside in `:synk`, preserving the bandwidth accounting semantics while allowing strategies to emit custom telemetry. `SyncStats` now reports aggregate message counts and byte totals rather than materialising every `SyncRequest`/`SyncResponse`.
 `SyncReplica<T>` (not shown above) encapsulates snapshot/materialisation helpers so individual strategies can decide how to split state or apply inbound envelopes without depending on Bloom-specific data types.
 #### Transport Contract
 
@@ -206,13 +212,13 @@ suspend fun <T : Any> Synk.sync(
    - Provide documentation that explains the new API shape and highlights the breaking changes.
 
 4. **Update build configuration**
-   - Register `:sync-strategies:bloom-rateless` in `settings.gradle.kts`.
-   - Adjust dependency declarations so strategy modules depend on `:synk`, and the root publication includes the default Bloom Rateless strategy.
+   - Register `:sync-strategies:bloom-rateless` and `:sync-strategies:full-state` in `settings.gradle.kts`.
+   - Adjust dependency declarations so strategy modules depend on `:synk`, and the root publication includes the default Bloom Rateless strategy while shipping the full-state fallback as an optional artefact.
 
 5. **Refresh tests and CI**
    - Port existing unit tests to the new module and ensure they compile against the updated APIs.
-   - Add new integration tests that cover a full sync run through `Synk.sync` using the generalized transport contract.
-   - Update CI scripts to run tests for the additional module.
+   - Add new integration tests that cover a full sync run through `Synk.sync` using the generalized transport contract, including the full-state strategy as a worked example.
+   - Update CI scripts to run tests for the additional modules.
 
 6. **Documentation**
    - Refresh `README.md` and `docs/conflict-sync.md` to describe the new public API surface and transport helpers.

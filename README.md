@@ -231,6 +231,15 @@ val stats = synk.sync(
 
 `sync` returns `SyncStats` so you can log how many objects were scanned, how much data crossed the wire, and how long each stage took.
 
+### Built-in strategies
+
+Synk publishes multiple strategy modules under the `com.tap.synk.strategy` package so you can pick the right trade-offs for your transport:
+
+- `BloomRatelessStrategyFactory` (module `:sync-strategies:bloom-rateless`) is a Bloom filter + rateless sketch protocol (name ConflictSync) and stays the default when you do not override the builder.
+- `FullStateStrategyFactory` (module `:sync-strategies:full-state`) streams a full snapshot in a single round-trip. It is useful as a fallback when bandwidth is plentiful, or you want a simple baseline before wiring smarter strategies.
+
+Swap strategies by passing a different factory to `Synk.sync` or registering an alternative default on the builder.
+
 ## Serialization
 
 To aid the relay of messages between applications Synk provides methods for serializing Messages to and from json.

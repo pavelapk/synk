@@ -2,8 +2,6 @@ package com.tap.synk.strategy.bloomrateless
 
 import com.tap.synk.sync.SyncConfiguration
 import com.tap.synk.sync.SyncContext
-import com.tap.synk.sync.SyncRequest
-import com.tap.synk.sync.SyncResponse
 import com.tap.synk.sync.SyncSession
 import com.tap.synk.sync.SyncStats
 import com.tap.synk.sync.SyncTransport
@@ -31,9 +29,8 @@ internal class BloomRatelessResponderSession<T : Any>(
             metaStore = context.metaStore,
             pageSize = configuration.pageSize,
         )
-        val outboundLog = mutableListOf<SyncRequest>()
-        val inboundLog = mutableListOf<SyncResponse>()
-        val transportAdapter = SyncTransportAdapter(transport, json, outboundLog, inboundLog)
+        val metrics = SyncMessageMetrics()
+        val transportAdapter = SyncTransportAdapter(transport, json, metrics)
         val strategyConfig = configuration.resolveBloomRatelessConfig()
         val stats = ConflictSyncResponder<T>(
             fpr = strategyConfig.falsePositiveRate,
@@ -43,8 +40,10 @@ internal class BloomRatelessResponderSession<T : Any>(
         SyncStats(
             adapterKey = context.adapterKey,
             scanned = stats.scanned,
-            outbound = outboundLog,
-            inbound = inboundLog,
+            outboundMessages = metrics.outboundMessages,
+            outboundBytes = metrics.outboundBytes,
+            inboundMessages = metrics.inboundMessages,
+            inboundBytes = metrics.inboundBytes,
             falseMatches = stats.falseMatches,
         )
     }

@@ -95,8 +95,10 @@ interface SyncTracker {
 data class SyncStats(
     val adapterKey: String,
     val scanned: Int,
-    val outbound: List<SyncRequest>,
-    val inbound: List<SyncResponse>,
+    val outboundMessages: Int,
+    val outboundBytes: Long,
+    val inboundMessages: Int,
+    val inboundBytes: Long,
     val falseMatches: Int,
 )
 
