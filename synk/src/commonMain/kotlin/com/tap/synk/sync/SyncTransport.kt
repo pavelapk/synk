@@ -1,15 +1,12 @@
 package com.tap.synk.sync
 
-import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import kotlin.text.encodeToByteArray
+import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 
 @Serializable
@@ -56,28 +53,26 @@ fun SyncPayload.byteSize(): Int = when (this) {
     is SyncPayload.Binary -> base64.encodeToByteArray().size
 }
 
-fun <T> Json.encodeSyncRequest(
+inline fun <reified T> Json.encodeSyncRequest(
     channel: String,
-    serializer: KSerializer<T>,
     value: T,
 ): EncodedSyncRequest {
-    val element = encodeToJsonElement(serializer, value)
+    val element = encodeToJsonElement(value)
     val payload = SyncPayload.Json(element)
-    val encoded = encodeToString(JsonElement.serializer(), element)
+    val encoded = encodeToString(value)
     return EncodedSyncRequest(
         request = SyncRequest(channel = channel, payload = payload),
         payloadBytes = encoded.encodeToByteArray().size,
     )
 }
 
-fun <T> Json.encodeSyncResponse(
+inline fun <reified T> Json.encodeSyncResponse(
     channel: String,
-    serializer: KSerializer<T>,
     value: T,
 ): EncodedSyncResponse {
-    val element = encodeToJsonElement(serializer, value)
+    val element = encodeToJsonElement(value)
     val payload = SyncPayload.Json(element)
-    val encoded = encodeToString(JsonElement.serializer(), element)
+    val encoded = encodeToString(value)
     return EncodedSyncResponse(
         response = SyncResponse(channel = channel, payload = payload),
         payloadBytes = encoded.encodeToByteArray().size,

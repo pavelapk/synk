@@ -19,21 +19,21 @@ internal data class FullStatePayload(
 )
 
 internal fun FullStatePayload.encodedRequest(json: Json): EncodedSyncRequest =
-    json.encodeSyncRequest(CHANNEL_FULL_STATE, FullStatePayload.serializer(), this)
+    json.encodeSyncRequest(CHANNEL_FULL_STATE, this)
 
 internal fun FullStatePayload.encodedResponse(json: Json): EncodedSyncResponse =
-    json.encodeSyncResponse(CHANNEL_FULL_STATE, FullStatePayload.serializer(), this)
+    json.encodeSyncResponse(CHANNEL_FULL_STATE, this)
 
 internal fun SyncRequest.toFullStatePayload(json: Json): FullStatePayload {
     require(channel == CHANNEL_FULL_STATE) { "Unexpected channel $channel, expected $CHANNEL_FULL_STATE" }
     val jsonPayload = payload as? SyncPayload.Json
         ?: error("Expected JSON payload but received ${payload::class.simpleName}")
-    return json.decodeFromJsonElement(FullStatePayload.serializer(), jsonPayload.body)
+    return json.decodeFromJsonElement<FullStatePayload>(jsonPayload.body)
 }
 
 internal fun SyncResponse.toFullStatePayload(json: Json): FullStatePayload {
     require(channel == CHANNEL_FULL_STATE) { "Unexpected channel $channel, expected $CHANNEL_FULL_STATE" }
     val jsonPayload = payload as? SyncPayload.Json
         ?: error("Expected JSON payload but received ${payload::class.simpleName}")
-    return json.decodeFromJsonElement(FullStatePayload.serializer(), jsonPayload.body)
+    return json.decodeFromJsonElement<FullStatePayload>(jsonPayload.body)
 }
