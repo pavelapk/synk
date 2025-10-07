@@ -110,7 +110,7 @@ data class SyncStats(
 - `SyncStateSource` reuses the existing `IDResolver` contract by paging with string identifiers, ensuring strategies can iterate deterministically without introducing new cursor types.
 - Because `SynkAdapter` already implements `IDResolver`, strategies can derive identifiers directly from registered adapters and keep pagination consistent across state sources and merge handlers.
 - `SyncMergeHandler` no longer receives a namespace parameter; handlers can capture any additional context they need when they are registered.
-- `SyncTracker`, `SyncStats`, and the new sealed `SyncTransferEvent` hierarchy reside in `:synk`, preserving the bandwidth accounting semantics while allowing strategies to emit custom telemetry. `SyncStats` now reports aggregate message counts and byte totals rather than materialising every `SyncRequest`/`SyncResponse`.
+- `SyncTracker`, `SyncStats`, and the new sealed `SyncTransferEvent` hierarchy reside in `:synk`, preserving the bandwidth accounting semantics while allowing strategies to emit custom telemetry. `SyncStats` now reports aggregate message counts and byte totals rather than materialising every `SyncRequest`/`SyncResponse`, and the shared `InstrumentedSyncTransport` wrapper records those totals automatically so strategies only produce payloads.
 `SyncReplica<T>` (not shown above) encapsulates snapshot/materialisation helpers so individual strategies can decide how to split state or apply inbound envelopes without depending on Bloom-specific data types.
 #### Transport Contract
 

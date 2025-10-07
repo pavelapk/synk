@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.text.encodeToByteArray
+import kotlinx.serialization.json.encodeToJsonElement
 
 @Serializable
 sealed interface SyncPayload {

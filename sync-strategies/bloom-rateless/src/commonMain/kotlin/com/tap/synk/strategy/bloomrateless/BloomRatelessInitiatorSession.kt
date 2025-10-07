@@ -6,6 +6,7 @@ import com.tap.synk.sync.SyncSession
 import com.tap.synk.sync.SyncStats
 import com.tap.synk.sync.SyncTransport
 import com.tap.synk.sync.SyncTracker
+import com.tap.synk.sync.instrument
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 
@@ -29,21 +30,17 @@ internal class BloomRatelessInitiatorSession<T : Any>(
             metaStore = context.metaStore,
             pageSize = configuration.pageSize,
         )
-        val metrics = SyncMessageMetrics()
-        val transportAdapter = SyncTransportAdapter(transport, json, metrics)
+        val instrumentedTransport = transport.instrument(tracker)
+        val transportAdapter = SyncTransportAdapter(instrumentedTransport, json)
         val strategyConfig = configuration.resolveBloomRatelessConfig()
         val stats = ConflictSyncBloomRateless<T>(
             fpr = strategyConfig.falsePositiveRate,
             hasher = strategyConfig.hasher,
             ratelessBatchSize = strategyConfig.ratelessBatchSize,
         ).sync(replica, transportAdapter, tracker)
-        SyncStats(
+        instrumentedTransport.snapshot(
             adapterKey = context.adapterKey,
             scanned = stats.scanned,
-            outboundMessages = metrics.outboundMessages,
-            outboundBytes = metrics.outboundBytes,
-            inboundMessages = metrics.inboundMessages,
-            inboundBytes = metrics.inboundBytes,
             falseMatches = stats.falseMatches,
         )
     }

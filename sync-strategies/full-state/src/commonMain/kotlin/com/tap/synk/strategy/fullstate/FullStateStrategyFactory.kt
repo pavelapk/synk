@@ -11,8 +11,7 @@ import com.tap.synk.sync.SyncStats
 import com.tap.synk.sync.SyncStrategyFactory
 import com.tap.synk.sync.SyncTransport
 import com.tap.synk.sync.SyncTracker
-import com.tap.synk.sync.SyncTransferEvent
-import com.tap.synk.sync.byteSize
+import com.tap.synk.sync.instrument
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -44,10 +43,8 @@ private class FullStateSession<T : Any>(
         context.warm()
 
         var scanned = 0
-        var outboundMessages = 0
-        var outboundBytes = 0L
-        var inboundMessages = 0
-        var inboundBytes = 0L
+
+        val instrumented = transport.instrument(tracker)
 
         val outboundFlow = flow {
             var afterId: String? = null
@@ -69,37 +66,21 @@ private class FullStateSession<T : Any>(
                 scanned += records.size
 
                 val payload = FullStatePayload(records)
-                val encoded = payload.encodedRequest(json)
-
-                outboundMessages += 1
-                outboundBytes += encoded.payloadBytes
-
-                registerOutbound(tracker, encoded.payloadBytes)
-                emit(encoded.request)
+                emit(payload.encodedRequest(json))
 
                 afterId = page.lastOrNull()?.let { context.adapter.resolveId(it) }
             } while (page.size == configuration.pageSize)
         }
 
-        transport.exchange(outboundFlow)
+        instrumented.exchange(outboundFlow)
             .collect { response ->
-                inboundMessages += 1
-                val payloadBytes = response.payload.byteSize()
-                inboundBytes += payloadBytes
-                registerInbound(tracker, payloadBytes)
                 val payload = response.toFullStatePayload(json)
                 applyPayload(payload)
             }
 
-        tracker.finish(FALSE_MATCHES_NONE)
-
-        SyncStats(
+        instrumented.snapshot(
             adapterKey = context.adapterKey,
             scanned = scanned,
-            outboundMessages = outboundMessages,
-            outboundBytes = outboundBytes,
-            inboundMessages = inboundMessages,
-            inboundBytes = inboundBytes,
             falseMatches = FALSE_MATCHES_NONE,
         )
     }
@@ -110,7 +91,7 @@ private class FullStateSession<T : Any>(
             val message = Message(
                 crdt = decoded,
                 meta = Meta(
-                    namespace = context.adapterKey,
+                    namespace = context.adapterKey, // TODO should be synchronized with com.tap.synk.meta.meta function
                     timestampMeta = record.meta,
                 ),
             )
@@ -118,26 +99,6 @@ private class FullStateSession<T : Any>(
             val inboundResult = context.synk.inbound(message, current)
             context.mergeHandler?.merge(inboundResult)
         }
-    }
-
-    private fun registerOutbound(tracker: SyncTracker, bytes: Int) {
-        tracker.register(
-            SyncTransferEvent.LocalToRemote(
-                stateBytes = bytes,
-                metadataBytes = 0,
-                upload = tracker.uploadBandwidth,
-            ),
-        )
-    }
-
-    private fun registerInbound(tracker: SyncTracker, bytes: Int) {
-        tracker.register(
-            SyncTransferEvent.RemoteToLocal(
-                stateBytes = bytes,
-                metadataBytes = 0,
-                download = tracker.downloadBandwidth,
-            ),
-        )
     }
 
     companion object {
