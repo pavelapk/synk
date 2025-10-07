@@ -264,7 +264,12 @@ class FullStateStrategyIntegrationTest {
                     }
                     launch {
                         for (request in inbound) {
-                            send(request.toFullStatePayload(fullStateJson).toSyncResponse(fullStateJson))
+                            send(
+                                SyncResponse(
+                                    channel = request.channel,
+                                    payload = request.payload,
+                                ),
+                            )
                         }
                     }
                 }

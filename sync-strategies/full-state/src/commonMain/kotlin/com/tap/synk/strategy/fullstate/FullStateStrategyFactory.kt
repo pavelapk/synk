@@ -1,8 +1,7 @@
 package com.tap.synk.strategy.fullstate
 
 import com.tap.synk.inbound
-import com.tap.synk.meta.Meta
-import com.tap.synk.relay.Message
+import com.tap.synk.message
 import com.tap.synk.sync.SyncConfiguration
 import com.tap.synk.sync.SyncContext
 import com.tap.synk.sync.SyncRole
@@ -12,6 +11,8 @@ import com.tap.synk.sync.SyncStrategyFactory
 import com.tap.synk.sync.SyncTransport
 import com.tap.synk.sync.SyncTracker
 import com.tap.synk.sync.instrument
+import com.tap.synk.relay.decodeToMessage
+import com.tap.synk.relay.encodeAsString
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -52,23 +53,21 @@ private class FullStateSession<T : Any>(
                 val page = context.stateSource.scan(afterId, configuration.pageSize)
                 if (page.isEmpty()) break
 
-                val records = page.map { obj ->
+                val messages = mutableListOf<String>()
+                var lastId: String? = null
+                page.forEach { obj ->
                     val id = context.adapter.resolveId(obj)
-                    val fields = context.adapter.encode(obj)
-                    val meta = context.metaStore.getMeta(id) ?: emptyMap()
-                    FullStatePayload.Record(
-                        id = id,
-                        fields = fields,
-                        meta = meta,
-                    )
+                    val message = context.synk.message(obj)
+                    messages += message.encodeAsString(context.adapter)
+                    lastId = id
                 }
 
-                scanned += records.size
+                scanned += messages.size
 
-                val payload = FullStatePayload(records)
+                val payload = FullStatePayload(messages)
                 emit(payload.encodedRequest(json))
 
-                afterId = page.lastOrNull()?.let { context.adapter.resolveId(it) }
+                afterId = lastId
             } while (page.size == configuration.pageSize)
         }
 
@@ -86,16 +85,9 @@ private class FullStateSession<T : Any>(
     }
 
     private suspend fun applyPayload(payload: FullStatePayload) {
-        payload.records.forEach { record ->
-            val decoded = context.adapter.decode(record.fields)
-            val message = Message(
-                crdt = decoded,
-                meta = Meta(
-                    namespace = context.adapterKey, // TODO should be synchronized with com.tap.synk.meta.meta function
-                    timestampMeta = record.meta,
-                ),
-            )
-            val current = context.stateSource.load(record.id)
+        payload.messages.forEach { encoded ->
+            val message = encoded.decodeToMessage(context.adapter)
+            val current = context.stateSource.load(context.adapter.resolveId(message.crdt))
             val inboundResult = context.synk.inbound(message, current)
             context.mergeHandler?.merge(inboundResult)
         }
