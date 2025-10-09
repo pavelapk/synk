@@ -27,7 +27,7 @@ interface SyncContext<T : Any> {
     val mergeHandler: SyncMergeHandler<T>?
     val synk: Synk
     val metaStore: MetaStore
-    val adapterKey: String
+    val namespace: String
     suspend fun warm()
 }
 
@@ -40,22 +40,6 @@ fun interface SyncMergeHandler<T : Any> {
     suspend fun merge(value: T)
 }
 
-sealed class Bandwidth {
-    abstract fun bytesPerSecond(): Double
-
-    data class Kbps(val value: Double) : Bandwidth() {
-        override fun bytesPerSecond(): Double = value * 1e3 / 8
-    }
-
-    data class Mbps(val value: Double) : Bandwidth() {
-        override fun bytesPerSecond(): Double = value * 1e6 / 8
-    }
-
-    data class Gbps(val value: Double) : Bandwidth() {
-        override fun bytesPerSecond(): Double = value * 1e9 / 8
-    }
-}
-
 sealed class SyncTransferEvent {
     abstract val stateBytes: Int
     abstract val metadataBytes: Int
@@ -63,36 +47,24 @@ sealed class SyncTransferEvent {
     data class LocalToRemote(
         override val stateBytes: Int,
         override val metadataBytes: Int,
-        val upload: Bandwidth,
     ) : SyncTransferEvent()
 
     data class RemoteToLocal(
         override val stateBytes: Int,
         override val metadataBytes: Int,
-        val download: Bandwidth,
     ) : SyncTransferEvent()
 
     val totalBytes: Int get() = stateBytes + metadataBytes
-
-    fun estimatedDurationSeconds(): Double? {
-        val bandwidth = when (this) {
-            is LocalToRemote -> upload.bytesPerSecond()
-            is RemoteToLocal -> download.bytesPerSecond()
-        }
-        return if (bandwidth > 0) totalBytes / bandwidth else null
-    }
 }
 
 interface SyncTracker {
     fun isReady(): Boolean
     fun register(event: SyncTransferEvent)
     fun finish()
-    val uploadBandwidth: Bandwidth
-    val downloadBandwidth: Bandwidth
 }
 
 data class SyncStats(
-    val adapterKey: String,
+    val namespace: String,
     val scanned: Int,
     val outboundMessages: Int,
     val outboundBytes: Long,
@@ -116,8 +88,6 @@ data class SyncConfiguration(
 interface StrategyOption<T : Any>
 
 class DefaultSyncTracker(
-    override val downloadBandwidth: Bandwidth,
-    override val uploadBandwidth: Bandwidth,
 ) : SyncTracker {
     private val events = mutableListOf<SyncTransferEvent>()
     private var finished = false

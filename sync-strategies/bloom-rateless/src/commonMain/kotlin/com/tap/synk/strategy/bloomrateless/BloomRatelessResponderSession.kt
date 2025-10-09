@@ -22,7 +22,7 @@ internal class BloomRatelessResponderSession<T : Any>(
     ): SyncStats = coroutineScope {
         context.warm()
         val replica = ReplicaState.build(
-            namespace = context.adapterKey,
+            namespace = context.namespace,
             synk = context.synk,
             stateSource = context.stateSource,
             mergeHandler = context.mergeHandler,
@@ -39,7 +39,7 @@ internal class BloomRatelessResponderSession<T : Any>(
             ratelessBatchSize = strategyConfig.ratelessBatchSize,
         ).sync(replica, transportAdapter, tracker)
         instrumentedTransport.snapshot(
-            adapterKey = context.adapterKey,
+            namespace = context.namespace,
             scanned = stats.scanned,
         )
     }

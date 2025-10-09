@@ -75,7 +75,7 @@ interface SyncContext<T : Any> {
     val mergeHandler: SyncMergeHandler<T>?
     val synk: Synk
     val metaStore: MetaStore
-    val adapterKey: String
+    val namespace: String
     suspend fun warm()
 }
 
@@ -95,7 +95,7 @@ interface SyncTracker {
 }
 
 data class SyncStats(
-    val adapterKey: String,
+    val namespace: String,
     val scanned: Int,
     val outboundMessages: Int,
     val outboundBytes: Long,
@@ -105,11 +105,11 @@ data class SyncStats(
 ```
 
 - `SyncStrategyFactory` replaces hard-coded driver instantiation. The `Synk.sync` entry point resolves a factory from a registry and passes the appropriate role (initiator/responder).
-- `SyncContext` exposes `adapterKey`, derived from the registered adapter, so strategies can log/report without requiring an explicit namespace argument.
+- `SyncContext` exposes `namespace`, derived from the registered adapter, so strategies can log/report without requiring an explicit namespace argument.
 - `SyncStateSource` reuses the existing `IDResolver` contract by paging with string identifiers, ensuring strategies can iterate deterministically without introducing new cursor types.
 - Because `SynkAdapter` already implements `IDResolver`, strategies can derive identifiers directly from registered adapters and keep pagination consistent across state sources and merge handlers.
 - `SyncMergeHandler` no longer receives a namespace parameter; handlers can capture any additional context they need when they are registered.
-- `SyncTracker`, `SyncStats`, and the new sealed `SyncTransferEvent` hierarchy reside in `:synk`, preserving the bandwidth accounting semantics while allowing strategies to emit custom telemetry. `SyncStats` now reports aggregate message counts and byte totals rather than materialising every `SyncRequest`/`SyncResponse`, and the shared `InstrumentedSyncTransport` wrapper records those totals automatically so strategies only produce payloads.
+- `SyncTracker`, `SyncStats`, and the sealed `SyncTransferEvent` hierarchy reside in `:synk`, centralising telemetry so strategies emit consistent transfer events without rolling their own accounting. `SyncStats` now reports aggregate message counts and byte totals rather than materialising every `SyncRequest`/`SyncResponse`, and the shared `InstrumentedSyncTransport` wrapper records those totals automatically so strategies only produce payloads.
 `SyncReplica<T>` (not shown above) encapsulates snapshot/materialisation helpers so individual strategies can decide how to split state or apply inbound envelopes without depending on Bloom-specific data types.
 #### Transport Contract
 

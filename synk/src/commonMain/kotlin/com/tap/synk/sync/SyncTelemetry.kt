@@ -25,7 +25,6 @@ internal class SyncMessageMetrics(
             SyncTransferEvent.LocalToRemote(
                 stateBytes = bytes,
                 metadataBytes = 0,
-                upload = tracker.uploadBandwidth,
             ),
         )
     }
@@ -37,7 +36,6 @@ internal class SyncMessageMetrics(
             SyncTransferEvent.RemoteToLocal(
                 stateBytes = bytes,
                 metadataBytes = 0,
-                download = tracker.downloadBandwidth,
             ),
         )
     }
@@ -49,9 +47,9 @@ internal class SyncMessageMetrics(
         }
     }
 
-    fun toStats(adapterKey: String, scanned: Int): SyncStats =
+    fun toStats(namespace: String, scanned: Int): SyncStats =
         SyncStats(
-            adapterKey = adapterKey,
+            namespace = namespace,
             scanned = scanned,
             outboundMessages = outboundMessages,
             outboundBytes = outboundBytes,
@@ -75,9 +73,9 @@ class InstrumentedSyncTransport internal constructor(
             }
     }
 
-    fun snapshot(adapterKey: String, scanned: Int): SyncStats {
+    fun snapshot(namespace: String, scanned: Int): SyncStats {
         metrics.finish()
-        return metrics.toStats(adapterKey, scanned)
+        return metrics.toStats(namespace, scanned)
     }
 }
 

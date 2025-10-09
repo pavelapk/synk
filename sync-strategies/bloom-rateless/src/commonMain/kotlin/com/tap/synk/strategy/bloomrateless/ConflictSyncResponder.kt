@@ -181,7 +181,6 @@ class ConflictSyncResponder<T : Any>(
             SyncTransferEvent.LocalToRemote(
                 stateBytes = uploadStateBytes,
                 metadataBytes = uploadMetadataBytes,
-                upload = tracker.uploadBandwidth,
             ),
         )
 
@@ -189,7 +188,6 @@ class ConflictSyncResponder<T : Any>(
             SyncTransferEvent.RemoteToLocal(
                 stateBytes = downloadStateBytes,
                 metadataBytes = downloadMetadataBytes,
-                download = tracker.downloadBandwidth,
             ),
         )
 

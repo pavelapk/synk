@@ -75,10 +75,10 @@ private class FullStateSession<T : Any>(
             .collect { response ->
                 val payload = response.toFullStatePayload(json)
                 applyPayload(payload)
-        }
+            }
 
         instrumented.snapshot(
-            adapterKey = context.adapterKey,
+            namespace = context.namespace,
             scanned = scanned,
         )
     }

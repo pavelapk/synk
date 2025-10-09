@@ -49,7 +49,6 @@ class ConflictSyncBloomRateless<T : Any>(
             SyncTransferEvent.LocalToRemote(
                 stateBytes = 0,
                 metadataBytes = localFilter.serializedSize(),
-                upload = tracker.uploadBandwidth,
             ),
         )
 
@@ -146,7 +145,6 @@ class ConflictSyncBloomRateless<T : Any>(
             SyncTransferEvent.RemoteToLocal(
                 stateBytes = downloadStateBytes,
                 metadataBytes = downloadMetadataBytes,
-                download = tracker.downloadBandwidth,
             ),
         )
 
@@ -154,7 +152,6 @@ class ConflictSyncBloomRateless<T : Any>(
             SyncTransferEvent.LocalToRemote(
                 stateBytes = outboundPlan.stateBytes,
                 metadataBytes = outboundPlan.metadataBytes,
-                upload = tracker.uploadBandwidth,
             ),
         )
 

@@ -51,15 +51,11 @@ private fun <T : Any> Synk.buildSyncContext(namespace: KClass<T>): SyncContext<T
         mergeHandler = mergeHandler,
         synk = this,
         metaStore = metaStore,
-        adapterKey = namespaceName,
+        namespace = namespaceName,
     )
 }
 
-fun defaultSyncTracker(): SyncTracker =
-    DefaultSyncTracker(
-        downloadBandwidth = Bandwidth.Mbps(1.0),
-        uploadBandwidth = Bandwidth.Mbps(1.0),
-    )
+fun defaultSyncTracker(): SyncTracker = DefaultSyncTracker()
 
 private class DefaultSyncContext<T : Any>(
     override val adapter: SynkAdapter<T>,
@@ -67,7 +63,7 @@ private class DefaultSyncContext<T : Any>(
     override val mergeHandler: SyncMergeHandler<T>?,
     override val synk: Synk,
     override val metaStore: MetaStore,
-    override val adapterKey: String,
+    override val namespace: String,
 ) : SyncContext<T> {
     override suspend fun warm() {
         metaStore.warm()

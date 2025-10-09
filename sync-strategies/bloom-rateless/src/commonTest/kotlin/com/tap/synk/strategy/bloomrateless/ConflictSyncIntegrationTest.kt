@@ -4,7 +4,6 @@ import com.tap.synk.Synk
 import com.tap.synk.adapter.SynkAdapter
 import com.tap.synk.config.CustomClockStorageConfiguration
 import com.tap.synk.recordChange
-import com.tap.synk.sync.Bandwidth
 import com.tap.synk.sync.DefaultSyncTracker
 import com.tap.synk.sync.SyncConfiguration
 import com.tap.synk.sync.SyncMergeHandler
@@ -174,7 +173,7 @@ class ConflictSyncIntegrationTest {
         println("$prefix ░$border░")
         println("$prefix ░   $label   ░")
         println("$prefix ░$border░")
-        println("$prefix   adapterKey           : ${stats.adapterKey}")
+        println("$prefix   namespace            : ${stats.namespace}")
         println("$prefix   scanned              : ${stats.scanned}")
         println("$prefix   outbound messages    : ${stats.outboundMessages} (${stats.outboundBytes} bytes)")
         println("$prefix   inbound messages     : ${stats.inboundMessages} (${stats.inboundBytes} bytes)")
@@ -214,10 +213,7 @@ class ConflictSyncIntegrationTest {
         override suspend fun load(id: String): T? = backing[id]
     }
 
-    private fun defaultTracker() = DefaultSyncTracker(
-        downloadBandwidth = Bandwidth.Mbps(1.0),
-        uploadBandwidth = Bandwidth.Mbps(1.0),
-    )
+    private fun defaultTracker() = DefaultSyncTracker()
 
     private class LinkedTransport(
         private val bloomTransform: (EndpointRole, BloomFilterPayload) -> BloomFilterPayload = { _, payload -> payload },
