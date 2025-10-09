@@ -47,8 +47,7 @@ class ConflictSyncBloomRateless<T : Any>(
 
         tracker.register(
             SyncTransferEvent.LocalToRemote(
-                stateBytes = 0,
-                metadataBytes = localFilter.serializedSize(),
+                bytes = localFilter.serializedSize().toLong(),
             ),
         )
 
@@ -100,7 +99,7 @@ class ConflictSyncBloomRateless<T : Any>(
         val outboundPlan = ConflictSyncLogger.stage(role, "Plan outbound envelopes") {
             buildOutboundPlan(local, namespace, remoteUnknown, localOnly, remoteOnlyHashes).also { plan ->
                 ConflictSyncLogger.log(role) {
-                    "envelopes=${plan.envelopes.size} stateBytes=${plan.stateBytes} metadataBytes=${plan.metadataBytes}"
+                    "envelopes=${plan.envelopes.size} stateBytes=${plan.stateBytes}"
                 }
             }
         }
@@ -140,18 +139,17 @@ class ConflictSyncBloomRateless<T : Any>(
             }
         }
 
-        val downloadMetadataBytes = remoteFilter.serializedSize() + sketchSize * CODED_SYMBOL_SIZE
+        val downloadBytes =
+            downloadStateBytes + remoteFilter.serializedSize() + sketchSize * CODED_SYMBOL_SIZE
         tracker.register(
             SyncTransferEvent.RemoteToLocal(
-                stateBytes = downloadStateBytes,
-                metadataBytes = downloadMetadataBytes,
+                bytes = downloadBytes.toLong(),
             ),
         )
 
         tracker.register(
             SyncTransferEvent.LocalToRemote(
-                stateBytes = outboundPlan.stateBytes,
-                metadataBytes = outboundPlan.metadataBytes,
+                bytes = outboundPlan.stateBytes.toLong(),
             ),
         )
 

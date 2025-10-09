@@ -18,24 +18,22 @@ internal class SyncMessageMetrics(
 
     private var finished = false
 
-    fun recordOutbound(bytes: Int) {
+    fun recordOutbound(bytes: Long) {
         outboundMessages += 1
         outboundBytes += bytes
         tracker.register(
             SyncTransferEvent.LocalToRemote(
-                stateBytes = bytes,
-                metadataBytes = 0,
+                bytes = bytes,
             ),
         )
     }
 
-    fun recordInbound(bytes: Int) {
+    fun recordInbound(bytes: Long) {
         inboundMessages += 1
         inboundBytes += bytes
         tracker.register(
             SyncTransferEvent.RemoteToLocal(
-                stateBytes = bytes,
-                metadataBytes = 0,
+                bytes = bytes,
             ),
         )
     }

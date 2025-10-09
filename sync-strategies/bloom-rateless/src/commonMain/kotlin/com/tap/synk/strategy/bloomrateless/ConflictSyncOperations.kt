@@ -44,7 +44,6 @@ internal suspend fun <T : Any> buildOutboundPlan(
 ): OutboundPlan {
     val envelopes = mutableListOf<TransportEnvelope>()
     var stateBytes = 0
-    var metadataBytes = 0
 
     val groupedMissing = missing.groupBy { it.objectKey }
     for ((objectKey, fields) in groupedMissing) {
@@ -78,12 +77,10 @@ internal suspend fun <T : Any> buildOutboundPlan(
 
     if (hashRequests.isNotEmpty()) {
         envelopes += TransportEnvelope.HashRequest(hashRequests)
-        metadataBytes += hashRequests.size * Long.SIZE_BYTES
     }
 
     return OutboundPlan(
         envelopes = envelopes,
         stateBytes = stateBytes,
-        metadataBytes = metadataBytes,
     )
 }

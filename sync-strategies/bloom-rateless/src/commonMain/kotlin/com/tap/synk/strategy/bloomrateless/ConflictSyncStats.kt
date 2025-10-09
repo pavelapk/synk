@@ -14,5 +14,4 @@ data class ConflictSyncStats(
 internal data class OutboundPlan(
     val envelopes: List<TransportEnvelope>,
     val stateBytes: Int,
-    val metadataBytes: Int,
 )

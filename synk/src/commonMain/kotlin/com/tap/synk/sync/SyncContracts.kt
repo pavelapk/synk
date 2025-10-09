@@ -41,20 +41,15 @@ fun interface SyncMergeHandler<T : Any> {
 }
 
 sealed class SyncTransferEvent {
-    abstract val stateBytes: Int
-    abstract val metadataBytes: Int
+    abstract val bytes: Long
 
     data class LocalToRemote(
-        override val stateBytes: Int,
-        override val metadataBytes: Int,
+        override val bytes: Long,
     ) : SyncTransferEvent()
 
     data class RemoteToLocal(
-        override val stateBytes: Int,
-        override val metadataBytes: Int,
+        override val bytes: Long,
     ) : SyncTransferEvent()
-
-    val totalBytes: Int get() = stateBytes + metadataBytes
 }
 
 interface SyncTracker {

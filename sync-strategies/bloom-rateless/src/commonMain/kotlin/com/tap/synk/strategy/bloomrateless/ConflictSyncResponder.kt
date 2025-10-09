@@ -102,7 +102,7 @@ class ConflictSyncResponder<T : Any>(
                 hashRequests = emptyList(),
             ).also { plan ->
                 ConflictSyncLogger.log(role) {
-                    "envelopes=${plan.envelopes.size} stateBytes=${plan.stateBytes} metadataBytes=${plan.metadataBytes}"
+                    "envelopes=${plan.envelopes.size} stateBytes=${plan.stateBytes}"
                 }
             }
         }
@@ -110,11 +110,9 @@ class ConflictSyncResponder<T : Any>(
         val outboundChannel = Channel<TransportEnvelope>(capacity = Channel.BUFFERED)
         val outboundEnvelopes = mutableListOf<TransportEnvelope>()
         var uploadStateBytes = outboundPlan.stateBytes
-        var uploadMetadataBytes = responderFilter.serializedSize() + ratelessSymbolsSent * CODED_SYMBOL_SIZE + outboundPlan.metadataBytes
 
         val inboundEnvelopes = mutableListOf<TransportEnvelope>()
         var downloadStateBytes = 0
-        var downloadMetadataBytes = 0
         var remoteOnlyHashCount = 0
 
         ConflictSyncLogger.stage(role, "Process inbound envelopes") {
@@ -148,7 +146,6 @@ class ConflictSyncResponder<T : Any>(
                         }
                         is TransportEnvelope.HashRequest -> {
                             remoteOnlyHashCount += envelope.hashes.size
-                            downloadMetadataBytes += envelope.hashes.size * Long.SIZE_BYTES
                             ConflictSyncLogger.log(role) {
                                 "hash request count=${envelope.hashes.size}"
                             }
@@ -179,15 +176,15 @@ class ConflictSyncResponder<T : Any>(
 
         tracker.register(
             SyncTransferEvent.LocalToRemote(
-                stateBytes = uploadStateBytes,
-                metadataBytes = uploadMetadataBytes,
+                bytes = (uploadStateBytes +
+                    responderFilter.serializedSize() +
+                    ratelessSymbolsSent * CODED_SYMBOL_SIZE).toLong(),
             ),
         )
 
         tracker.register(
             SyncTransferEvent.RemoteToLocal(
-                stateBytes = downloadStateBytes,
-                metadataBytes = downloadMetadataBytes,
+                bytes = downloadStateBytes.toLong(),
             ),
         )
 

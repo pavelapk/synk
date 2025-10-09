@@ -180,7 +180,7 @@ sealed interface TransportEnvelope {
 
 The numbered steps from `bloomriblthashes.rs` map directly onto the initiator/responder interaction:
 
-1. **Initiator Bloom (Rust step 1).** Initiator builds `local_filter` from `local.split()` and calls `transport.bloom(flowOf(localPayload))`. Tracker records metadata upload.
+1. **Initiator Bloom (Rust step 1).** Initiator builds `local_filter` from `local.split()` and calls `transport.bloom(flowOf(localPayload))`. Tracker records the Bloom-filter upload.
 2. **Responder partition (Rust step 2).** Responder partitions its decompositions into `(remote_common, local_unknown)` using the received Bloom filter.
 3. **Responder Bloom (Rust step 3).** Responder sends its own Bloom filter for `remote_common` through the returned Bloom flow.
 4. **Responder rateless (Rust step 4).** Responder hashes `remote_common`, seeds a `RatelessIBLT`, and streams the sketch via `transport.rateless`.
