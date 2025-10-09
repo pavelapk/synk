@@ -157,9 +157,6 @@ class ConflictSyncIntegrationTest {
                     val mergedResponder = responderData.values.sortedBy { it.id }
                     assertEquals(mergedInitiator, mergedResponder)
 
-                    assertTrue(initiatorStats.falseMatches >= 0)
-                    assertTrue(responderStats.falseMatches >= 0)
-
                     printStats("$label • Initiator", initiatorStats)
                     printStats("$label • Responder", responderStats)
                 } finally {
@@ -179,7 +176,6 @@ class ConflictSyncIntegrationTest {
         println("$prefix ░$border░")
         println("$prefix   adapterKey           : ${stats.adapterKey}")
         println("$prefix   scanned              : ${stats.scanned}")
-        println("$prefix   falseMatches         : ${stats.falseMatches}")
         println("$prefix   outbound messages    : ${stats.outboundMessages} (${stats.outboundBytes} bytes)")
         println("$prefix   inbound messages     : ${stats.inboundMessages} (${stats.inboundBytes} bytes)")
         println("$prefix ░$border░")

@@ -41,7 +41,6 @@ internal class BloomRatelessResponderSession<T : Any>(
         instrumentedTransport.snapshot(
             adapterKey = context.adapterKey,
             scanned = stats.scanned,
-            falseMatches = stats.falseMatches,
         )
     }
 }

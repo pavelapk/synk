@@ -159,7 +159,7 @@ class ConflictSyncBloomRateless<T : Any>(
         )
 
         val falseMatches = localOnlyHashes.size + remoteOnlyHashes.size
-        tracker.finish(falseMatches)
+        tracker.finish()
 
         ConflictSyncLogger.log(role) {
             "summary outbound=${outboundPlan.envelopes.size} inbound=${inboundEnvelopes.size} falseMatches=$falseMatches"

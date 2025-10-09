@@ -209,7 +209,6 @@ class FullStateStrategyIntegrationTest {
         if (expectedInbound > 0) {
             assertTrue(stats.inboundBytes > 0)
         }
-        assertEquals(0, stats.falseMatches)
     }
 
     private fun expectedPages(total: Int, pageSize: Int): Int {

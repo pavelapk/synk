@@ -194,7 +194,7 @@ class ConflictSyncResponder<T : Any>(
         )
 
         val falseMatches = remoteOnlyHashCount
-        tracker.finish(falseMatches)
+        tracker.finish()
 
         ConflictSyncLogger.log(role) {
             "summary outbound=${outboundEnvelopes.size} inbound=${inboundEnvelopes.size} hashRequests=$remoteOnlyHashCount"

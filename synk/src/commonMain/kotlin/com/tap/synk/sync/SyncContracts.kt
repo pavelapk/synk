@@ -86,8 +86,7 @@ sealed class SyncTransferEvent {
 interface SyncTracker {
     fun isReady(): Boolean
     fun register(event: SyncTransferEvent)
-    fun finish(falseMatches: Int)
-    fun falseMatches(): Int
+    fun finish()
     val uploadBandwidth: Bandwidth
     val downloadBandwidth: Bandwidth
 }
@@ -99,7 +98,6 @@ data class SyncStats(
     val outboundBytes: Long,
     val inboundMessages: Int,
     val inboundBytes: Long,
-    val falseMatches: Int,
 )
 
 data class SyncConfiguration(
@@ -122,23 +120,19 @@ class DefaultSyncTracker(
     override val uploadBandwidth: Bandwidth,
 ) : SyncTracker {
     private val events = mutableListOf<SyncTransferEvent>()
-    private var falseMatchesCount: Int? = null
+    private var finished = false
 
     fun events(): List<SyncTransferEvent> = events.toList()
 
-    override fun isReady(): Boolean = events.isEmpty() && falseMatchesCount == null
+    override fun isReady(): Boolean = events.isEmpty() && !finished
 
     override fun register(event: SyncTransferEvent) {
-        if (falseMatchesCount == null) {
+        if (!finished) {
             events += event
         }
     }
 
-    override fun finish(falseMatches: Int) {
-        if (falseMatchesCount == null) {
-            falseMatchesCount = falseMatches
-        }
+    override fun finish() {
+        finished = true
     }
-
-    override fun falseMatches(): Int = falseMatchesCount ?: error("finish() must be called before falseMatches()")
 }

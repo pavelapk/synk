@@ -91,7 +91,7 @@ fun interface SyncMergeHandler<T : Any> {
 interface SyncTracker {
     fun isReady(): Boolean
     fun register(event: SyncTransferEvent)
-    fun finish(falseMatches: Int)
+    fun finish()
 }
 
 data class SyncStats(
@@ -101,7 +101,6 @@ data class SyncStats(
     val outboundBytes: Long,
     val inboundMessages: Int,
     val inboundBytes: Long,
-    val falseMatches: Int,
 )
 ```
 

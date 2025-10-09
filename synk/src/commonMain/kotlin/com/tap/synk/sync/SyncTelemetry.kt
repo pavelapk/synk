@@ -42,14 +42,14 @@ internal class SyncMessageMetrics(
         )
     }
 
-    fun finish(falseMatches: Int) {
+    fun finish() {
         if (!finished) {
-            tracker.finish(falseMatches)
+            tracker.finish()
             finished = true
         }
     }
 
-    fun toStats(adapterKey: String, scanned: Int, falseMatches: Int): SyncStats =
+    fun toStats(adapterKey: String, scanned: Int): SyncStats =
         SyncStats(
             adapterKey = adapterKey,
             scanned = scanned,
@@ -57,7 +57,6 @@ internal class SyncMessageMetrics(
             outboundBytes = outboundBytes,
             inboundMessages = inboundMessages,
             inboundBytes = inboundBytes,
-            falseMatches = falseMatches,
         )
 }
 
@@ -76,9 +75,9 @@ class InstrumentedSyncTransport internal constructor(
             }
     }
 
-    fun snapshot(adapterKey: String, scanned: Int, falseMatches: Int): SyncStats {
-        metrics.finish(falseMatches)
-        return metrics.toStats(adapterKey, scanned, falseMatches)
+    fun snapshot(adapterKey: String, scanned: Int): SyncStats {
+        metrics.finish()
+        return metrics.toStats(adapterKey, scanned)
     }
 }
 

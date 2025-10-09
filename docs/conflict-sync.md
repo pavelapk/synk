@@ -192,7 +192,7 @@ The numbered steps from `bloomriblthashes.rs` map directly onto the initiator/re
    - A single `HashRequest(remote_only_hashes)`.
 8. **Responder decompositions (Rust step 8).** Responder applies incoming payloads, resolves requested hashes via `remote_hashes`, and responds with `HashResponse` blocks.
 9. **Join (Rust step 9).** Each side joins the appropriate deltas into its local state.
-10. **Tracker finish (Rust step 10).** Both sides call `tracker.finish(falseMatches)` using the Kotlin `Measure` implementation.
+10. **Tracker finish (Rust step 10).** Both sides call `tracker.finish()` once reconciliation completes. False-positive counts are reported through the strategy-specific `ConflictSyncStats`.
 
 Every stage is deterministic because both sides hash the same `FieldFingerprint` bytes. No cache outlives the stage that needs it.
 

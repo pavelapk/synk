@@ -75,12 +75,11 @@ private class FullStateSession<T : Any>(
             .collect { response ->
                 val payload = response.toFullStatePayload(json)
                 applyPayload(payload)
-            }
+        }
 
         instrumented.snapshot(
             adapterKey = context.adapterKey,
             scanned = scanned,
-            falseMatches = FALSE_MATCHES_NONE,
         )
     }
 
@@ -93,7 +92,4 @@ private class FullStateSession<T : Any>(
         }
     }
 
-    companion object {
-        private const val FALSE_MATCHES_NONE = 0
-    }
 }
