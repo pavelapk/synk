@@ -40,16 +40,14 @@ fun interface SyncMergeHandler<T : Any> {
     suspend fun merge(value: T)
 }
 
-sealed class SyncTransferEvent {
-    abstract val bytes: Long
-
-    data class LocalToRemote(
-        override val bytes: Long,
-    ) : SyncTransferEvent()
-
-    data class RemoteToLocal(
-        override val bytes: Long,
-    ) : SyncTransferEvent()
+data class SyncTransferEvent(
+    val direction: Direction,
+    val bytes: Long,
+) {
+    enum class Direction {
+        LOCAL_TO_REMOTE,
+        REMOTE_TO_LOCAL,
+    }
 }
 
 interface SyncTracker {
@@ -84,16 +82,21 @@ interface StrategyOption<T : Any>
 
 class DefaultSyncTracker(
 ) : SyncTracker {
-    private val events = mutableListOf<SyncTransferEvent>()
+    private var uploadedBytes: Long = 0
+    private var downloadedBytes: Long = 0
     private var finished = false
 
-    fun events(): List<SyncTransferEvent> = events.toList()
+    fun uploads(): Long = uploadedBytes
+    fun downloads(): Long = downloadedBytes
 
-    override fun isReady(): Boolean = events.isEmpty() && !finished
+    override fun isReady(): Boolean = uploadedBytes == 0L && downloadedBytes == 0L && !finished
 
     override fun register(event: SyncTransferEvent) {
         if (!finished) {
-            events += event
+            when (event.direction) {
+                SyncTransferEvent.Direction.LOCAL_TO_REMOTE -> uploadedBytes += event.bytes
+                SyncTransferEvent.Direction.REMOTE_TO_LOCAL -> downloadedBytes += event.bytes
+            }
         }
     }
 

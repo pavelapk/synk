@@ -22,7 +22,8 @@ internal class SyncMessageMetrics(
         outboundMessages += 1
         outboundBytes += bytes
         tracker.register(
-            SyncTransferEvent.LocalToRemote(
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.LOCAL_TO_REMOTE,
                 bytes = bytes,
             ),
         )
@@ -32,7 +33,8 @@ internal class SyncMessageMetrics(
         inboundMessages += 1
         inboundBytes += bytes
         tracker.register(
-            SyncTransferEvent.RemoteToLocal(
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.REMOTE_TO_LOCAL,
                 bytes = bytes,
             ),
         )

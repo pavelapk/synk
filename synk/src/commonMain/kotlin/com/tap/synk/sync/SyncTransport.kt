@@ -71,8 +71,8 @@ inline fun <reified T> Json.encodeSyncRequest(
     value: T,
 ): EncodedSyncRequest {
     val element = encodeToJsonElement(value)
-    val payloadBytes = element.toString().encodeToByteArray().size.toLong()
-    val payload = SyncPayload.Json(body = element, byteCount = payloadBytes)
+    val payload = buildJsonPayload(element)
+    val payloadBytes = payload.byteCount
     return EncodedSyncRequest(
         request = SyncRequest(channel = channel, payload = payload),
         payloadBytes = payloadBytes,
@@ -84,8 +84,8 @@ inline fun <reified T> Json.encodeSyncResponse(
     value: T,
 ): EncodedSyncResponse {
     val element = encodeToJsonElement(value)
-    val payloadBytes = element.toString().encodeToByteArray().size.toLong()
-    val payload = SyncPayload.Json(body = element, byteCount = payloadBytes)
+    val payload = buildJsonPayload(element)
+    val payloadBytes = payload.byteCount
     return EncodedSyncResponse(
         response = SyncResponse(channel = channel, payload = payload),
         payloadBytes = payloadBytes,
@@ -103,6 +103,14 @@ fun SyncPayload.Companion.binaryFromByteArray(bytes: ByteArray): SyncPayload.Bin
 @OptIn(ExperimentalEncodingApi::class)
 fun SyncPayload.Binary.decodeToByteArray(): ByteArray {
     return Base64.decode(base64)
+}
+
+@PublishedApi
+internal fun buildJsonPayload(
+    element: JsonElement,
+): SyncPayload.Json {
+    val byteCount = element.toString().encodeToByteArray().size.toLong()
+    return SyncPayload.Json(body = element, byteCount = byteCount)
 }
 
 private const val UNKNOWN_SIZE = -1L

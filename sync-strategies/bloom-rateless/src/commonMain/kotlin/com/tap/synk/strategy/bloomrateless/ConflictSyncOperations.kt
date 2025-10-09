@@ -32,8 +32,8 @@ internal fun hashDecompositions(
     return hashed
 }
 
-internal fun totalStateBytes(decompositions: Collection<FieldDecomposition>): Int =
-    decompositions.sumOf { it.sizeOf() }
+internal fun totalStateBytes(decompositions: Collection<FieldDecomposition>): Long =
+    decompositions.sumOf { it.sizeOf().toLong() }
 
 internal suspend fun <T : Any> buildOutboundPlan(
     replica: ReplicaState<T>,
@@ -43,15 +43,15 @@ internal suspend fun <T : Any> buildOutboundPlan(
     hashRequests: List<Long>,
 ): OutboundPlan {
     val envelopes = mutableListOf<TransportEnvelope>()
-    var stateBytes = 0
+    var stateBytes = 0L
 
     val groupedMissing = missing.groupBy { it.objectKey }
     for ((objectKey, fields) in groupedMissing) {
         val snapshot = replica.snapshotBlock(objectKey, fields)
         if (snapshot != null) {
             envelopes += TransportEnvelope.Snapshot(snapshot)
-            stateBytes += snapshot.encodedObject.size
-            stateBytes += snapshot.fields.sumOf { it.sizeOf() }
+            stateBytes += snapshot.encodedObject.size.toLong()
+            stateBytes += snapshot.fields.sumOf { it.sizeOf().toLong() }
         } else {
             fields.forEach { field ->
                 envelopes += TransportEnvelope.Field(
@@ -60,7 +60,7 @@ internal suspend fun <T : Any> buildOutboundPlan(
                         field = field,
                     ),
                 )
-                stateBytes += field.sizeOf()
+                stateBytes += field.sizeOf().toLong()
             }
         }
     }
@@ -72,7 +72,7 @@ internal suspend fun <T : Any> buildOutboundPlan(
                 field = field,
             ),
         )
-        stateBytes += field.sizeOf()
+        stateBytes += field.sizeOf().toLong()
     }
 
     if (hashRequests.isNotEmpty()) {

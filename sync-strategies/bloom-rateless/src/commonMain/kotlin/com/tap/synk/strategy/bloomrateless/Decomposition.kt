@@ -14,6 +14,6 @@ interface Extract<Item> {
 }
 
 interface Measure {
-    fun sizeOf(): Int
+    fun sizeOf(): Long
     fun falseMatches(other: Measure): Int
 }

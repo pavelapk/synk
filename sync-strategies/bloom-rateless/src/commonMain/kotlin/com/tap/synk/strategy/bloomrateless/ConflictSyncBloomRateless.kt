@@ -46,7 +46,8 @@ class ConflictSyncBloomRateless<T : Any>(
         }
 
         tracker.register(
-            SyncTransferEvent.LocalToRemote(
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.LOCAL_TO_REMOTE,
                 bytes = localFilter.serializedSize().toLong(),
             ),
         )
@@ -94,7 +95,7 @@ class ConflictSyncBloomRateless<T : Any>(
         val localOnly = localOnlyHashes.mapNotNull { localHashes[it] }
 
         val sketchSize = remoteIblt.size()
-        var downloadStateBytes = 0
+        var downloadStateBytes = 0L
 
         val outboundPlan = ConflictSyncLogger.stage(role, "Plan outbound envelopes") {
             buildOutboundPlan(local, namespace, remoteUnknown, localOnly, remoteOnlyHashes).also { plan ->
@@ -111,22 +112,22 @@ class ConflictSyncBloomRateless<T : Any>(
                 inboundEnvelopes += envelope
                 when (envelope) {
                     is TransportEnvelope.Field -> {
-                        downloadStateBytes += envelope.payload.field.sizeOf()
+                        downloadStateBytes += envelope.payload.field.sizeOf().toLong()
                         local.join(listOf(envelope.payload.field))
                         ConflictSyncLogger.log(role) {
                             "apply field=${envelope.payload.field.field} object=${envelope.payload.field.objectKey.id}"
                         }
                     }
                     is TransportEnvelope.Snapshot -> {
-                        downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf() }
-                        downloadStateBytes += envelope.payload.encodedObject.size
+                        downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf().toLong() }
+                        downloadStateBytes += envelope.payload.encodedObject.size.toLong()
                         local.applySnapshot(envelope.payload)
                         ConflictSyncLogger.log(role) {
                             "apply snapshot object=${envelope.payload.objectKey.id} fields=${envelope.payload.fields.size}"
                         }
                     }
                     is TransportEnvelope.HashResponse -> {
-                        downloadStateBytes += envelope.fields.sumOf { it.sizeOf() }
+                        downloadStateBytes += envelope.fields.sumOf { it.sizeOf().toLong() }
                         local.join(envelope.fields)
                         ConflictSyncLogger.log(role) {
                             "apply hash response fields=${envelope.fields.size}"
@@ -140,16 +141,20 @@ class ConflictSyncBloomRateless<T : Any>(
         }
 
         val downloadBytes =
-            downloadStateBytes + remoteFilter.serializedSize() + sketchSize * CODED_SYMBOL_SIZE
+            downloadStateBytes +
+                remoteFilter.serializedSize().toLong() +
+                sketchSize.toLong() * CODED_SYMBOL_SIZE
         tracker.register(
-            SyncTransferEvent.RemoteToLocal(
-                bytes = downloadBytes.toLong(),
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.REMOTE_TO_LOCAL,
+                bytes = downloadBytes,
             ),
         )
 
         tracker.register(
-            SyncTransferEvent.LocalToRemote(
-                bytes = outboundPlan.stateBytes.toLong(),
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.LOCAL_TO_REMOTE,
+                bytes = outboundPlan.stateBytes,
             ),
         )
 

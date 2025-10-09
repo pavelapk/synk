@@ -112,7 +112,7 @@ class ConflictSyncResponder<T : Any>(
         var uploadStateBytes = outboundPlan.stateBytes
 
         val inboundEnvelopes = mutableListOf<TransportEnvelope>()
-        var downloadStateBytes = 0
+        var downloadStateBytes = 0L
         var remoteOnlyHashCount = 0
 
         ConflictSyncLogger.stage(role, "Process inbound envelopes") {
@@ -130,15 +130,15 @@ class ConflictSyncResponder<T : Any>(
                     inboundEnvelopes += envelope
                     when (envelope) {
                         is TransportEnvelope.Snapshot -> {
-                            downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf() }
-                            downloadStateBytes += envelope.payload.encodedObject.size
+                            downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf().toLong() }
+                            downloadStateBytes += envelope.payload.encodedObject.size.toLong()
                             local.applySnapshot(envelope.payload)
                             ConflictSyncLogger.log(role) {
                                 "apply snapshot object=${envelope.payload.objectKey.id} fields=${envelope.payload.fields.size}"
                             }
                         }
                         is TransportEnvelope.Field -> {
-                            downloadStateBytes += envelope.payload.field.sizeOf()
+                            downloadStateBytes += envelope.payload.field.sizeOf().toLong()
                             local.join(listOf(envelope.payload.field))
                             ConflictSyncLogger.log(role) {
                                 "apply field=${envelope.payload.field.field} object=${envelope.payload.field.objectKey.id}"
@@ -153,7 +153,7 @@ class ConflictSyncResponder<T : Any>(
                             if (responseFields.isNotEmpty()) {
                                 val response = TransportEnvelope.HashResponse(responseFields)
                                 outboundEnvelopes += response
-                                uploadStateBytes += response.fields.sumOf { it.sizeOf() }
+                                uploadStateBytes += response.fields.sumOf { it.sizeOf().toLong() }
                                 outboundChannel.send(response)
                                 ConflictSyncLogger.log(role) {
                                     "send hash response fields=${response.fields.size}"
@@ -161,7 +161,7 @@ class ConflictSyncResponder<T : Any>(
                             }
                         }
                         is TransportEnvelope.HashResponse -> {
-                            downloadStateBytes += envelope.fields.sumOf { it.sizeOf() }
+                            downloadStateBytes += envelope.fields.sumOf { it.sizeOf().toLong() }
                             local.join(envelope.fields)
                             ConflictSyncLogger.log(role) {
                                 "apply hash response fields=${envelope.fields.size}"
@@ -175,16 +175,18 @@ class ConflictSyncResponder<T : Any>(
         }
 
         tracker.register(
-            SyncTransferEvent.LocalToRemote(
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.LOCAL_TO_REMOTE,
                 bytes = (uploadStateBytes +
-                    responderFilter.serializedSize() +
-                    ratelessSymbolsSent * CODED_SYMBOL_SIZE).toLong(),
+                    responderFilter.serializedSize().toLong() +
+                    ratelessSymbolsSent.toLong() * CODED_SYMBOL_SIZE),
             ),
         )
 
         tracker.register(
-            SyncTransferEvent.RemoteToLocal(
-                bytes = downloadStateBytes.toLong(),
+            SyncTransferEvent(
+                direction = SyncTransferEvent.Direction.REMOTE_TO_LOCAL,
+                bytes = downloadStateBytes,
             ),
         )
 

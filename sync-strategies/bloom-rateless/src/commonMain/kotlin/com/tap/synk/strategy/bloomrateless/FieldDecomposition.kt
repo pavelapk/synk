@@ -38,12 +38,12 @@ data class FieldDecomposition(
         ),
     )
 
-    override fun sizeOf(): Int {
+    override fun sizeOf(): Long {
         val namespaceBytes = namespace.encodeToByteArray().size
         val idBytes = objectKey.id.encodeToByteArray().size
         val fieldBytes = field.encodeToByteArray().size
         val hlcBytes = hlcString.encodeToByteArray().size
-        return encodedValue.size + namespaceBytes + idBytes + fieldBytes + hlcBytes + METADATA_BYTES
+        return encodedValue.size.toLong() + namespaceBytes + idBytes + fieldBytes + hlcBytes + METADATA_BYTES
     }
 
     override fun falseMatches(other: Measure): Int = when (other) {
