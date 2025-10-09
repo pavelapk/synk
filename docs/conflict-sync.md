@@ -137,6 +137,8 @@ The responder side listens on the same transport functions, builds its own `Repl
 
 Both sides share helper routines (`buildFilter`, `partition`, `ribltFrom`, `findAllDifferences`). The only difference is whether they start the session or answer it.
 
+Server-style responders can stay active and handle successive client sync sessions by feeding a `Flow<SyncTransport>` (or `Flow<SyncResponderSession>`) into `Synk.serveResponder`. The helper keeps creating responder sessions as new requests arrive, so callers can expose a long-lived endpoint instead of launching `Synk.sync` for every handshake.
+
 ### Transport contract (Flow transformers)
 
 The Rust reference runs both replicas inside one process; in Synk the peers live on different machines. We express the network as Flow transformers that implement the same three message channels used in the Rust code: the Bloom handshake, the rateless sketch, and the actual decompositions.
@@ -180,7 +182,7 @@ sealed interface TransportEnvelope {
 
 The numbered steps from `bloomriblthashes.rs` map directly onto the initiator/responder interaction:
 
-1. **Initiator Bloom (Rust step 1).** Initiator builds `local_filter` from `local.split()` and calls `transport.bloom(flowOf(localPayload))`. Tracker records metadata upload.
+1. **Initiator Bloom (Rust step 1).** Initiator builds `local_filter` from `local.split()` and calls `transport.bloom(flowOf(localPayload))`. Tracker records the Bloom-filter upload.
 2. **Responder partition (Rust step 2).** Responder partitions its decompositions into `(remote_common, local_unknown)` using the received Bloom filter.
 3. **Responder Bloom (Rust step 3).** Responder sends its own Bloom filter for `remote_common` through the returned Bloom flow.
 4. **Responder rateless (Rust step 4).** Responder hashes `remote_common`, seeds a `RatelessIBLT`, and streams the sketch via `transport.rateless`.
@@ -192,7 +194,7 @@ The numbered steps from `bloomriblthashes.rs` map directly onto the initiator/re
    - A single `HashRequest(remote_only_hashes)`.
 8. **Responder decompositions (Rust step 8).** Responder applies incoming payloads, resolves requested hashes via `remote_hashes`, and responds with `HashResponse` blocks.
 9. **Join (Rust step 9).** Each side joins the appropriate deltas into its local state.
-10. **Tracker finish (Rust step 10).** Both sides call `tracker.finish(falseMatches)` using the Kotlin `Measure` implementation.
+10. **Tracker finish (Rust step 10).** Both sides call `tracker.finish()` once reconciliation completes. False-positive counts are reported through the strategy-specific `ConflictSyncStats`.
 
 Every stage is deterministic because both sides hash the same `FieldFingerprint` bytes. No cache outlives the stage that needs it.
 

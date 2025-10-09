@@ -199,19 +199,19 @@ Conflict Sync is Synk's streaming reconciliation layer. The full protocol is doc
 
 Conflict Sync needs a way to read the current state and a way to persist merges:
 
-- `StateSource` pages through your objects in deterministic order and lets the engine look them up by id when it needs to ship a snapshot or confirm a merge.
-- `MergeHandler` writes the reconciled object back to your database once `Synk.inbound` decides the winning values.
+- `SyncStateSource` pages through your objects in deterministic order and lets the engine look them up by id when it needs to ship a snapshot or confirm a merge.
+- `SyncMergeHandler` writes the reconciled object back to your database once `Synk.inbound` decides the winning values.
 
 ```kotlin
-val stateSource = object : StateSource<Customer> {
-    override suspend fun scan(after: ObjectKey?, limit: Int): List<Customer> =
-        customerDao.fetchPage(after = after, limit = limit)
+val stateSource = object : SyncStateSource<Customer> {
+    override suspend fun scan(afterId: String?, limit: Int): List<Customer> =
+        customerDao.fetchPage(afterId = afterId, limit = limit)
 
-    override suspend fun byId(id: String): Customer? =
+    override suspend fun load(id: String): Customer? =
         customerDao.findById(id)
 }
 
-val mergeHandler = MergeHandler<Customer> { namespace, customer ->
+val mergeHandler = SyncMergeHandler<Customer> { customer ->
     customerDao.upsert(customer)
 }
 
@@ -219,15 +219,35 @@ val synk = Synk.Builder(clockStorageConfig)
     .registerSynkAdapter(CustomerAdapter())
     .registerStateSource(Customer::class, stateSource)
     .onMerged(Customer::class, mergeHandler)
+    .defaultStrategy(BloomRatelessStrategyFactory)
     .build()
 
-val stats = synk.conflictSync(
+val stats = synk.sync(
     namespace = Customer::class,
+    role = SyncRole.INITIATOR,
     transport = transport,
 )
 ```
 
-`conflictSync` returns `SyncStats` so you can log how many objects were scanned, how many data crossed the wire, and how long each stage took.
+`sync` returns `SyncStats` so you can log how many objects were scanned, how much data crossed the wire, and how long each stage took.
+
+Responders that stay online can hand the library a stream of inbound sessions. Feed a `Flow<SyncTransport>` into `Synk.serveResponder` and it will keep creating responder runs as requests arrive:
+
+```kotlin
+synk.serveResponder(
+    namespace = Customer::class,
+    transports = backend.acceptSessions(), // Flow<SyncTransport>
+)
+```
+
+### Built-in strategies
+
+Synk publishes multiple strategy modules under the `com.tap.synk.strategy` package so you can pick the right trade-offs for your transport:
+
+- `BloomRatelessStrategyFactory` (module `:sync-strategies:bloom-rateless`) is a Bloom filter + rateless sketch protocol (name ConflictSync) and stays the default when you do not override the builder.
+- `FullStateStrategyFactory` (module `:sync-strategies:full-state`) streams a full snapshot in a single round-trip. It is useful as a fallback when bandwidth is plentiful, or you want a simple baseline before wiring smarter strategies.
+
+Swap strategies by passing a different factory to `Synk.sync` or registering an alternative default on the builder.
 
 ## Serialization
 

@@ -1,10 +1,21 @@
 # Repository Guidelines
 
+## Synk library Guide
+`Synk` is sync with "K" for Kotlin.
+
 ## Project Structure & Module Organization
 - Root modules: `:synk` (KMP library), `:libs:*`, `:extension:kotlin-serialization`, `:metastores:delightful-metastore`, `:plugins:ksp-adapter-codegen`.
 - Source sets (KMP): `synk/src/commonMain/kotlin`, `synk/src/androidMain/kotlin`, tests in `synk/src/commonTest/kotlin`.
 - Build scripts: `build.gradle.kts`, module `build.gradle.kts`, and `settings.gradle.kts` for module inclusion and repositories.
 - Docs and metadata: `README.md`, `docs/`, `.editorconfig` for formatting rules.
+
+### Module Responsibilities
+- `:synk`: Core Kotlin Multiplatform CRDT runtime that exposes change tracking, messaging, and conflict-resolution APIs. Hosts multiplatform targets (Android, JVM, iOS) and depends on shared libs for annotations, concurrency, serialization, and datetime utilities.
+- `:libs:annotations`: Houses compile-time annotations such as `@SynkAdapter` and `@SynkSerializer` that drive generated integration code and keep the core module free from annotation-only dependencies.
+- `:libs:concurrent-map`: Provides reusable multiplatform concurrency utilities (e.g., `CMap`, `ReadWriteMutex`) for thread-safe maps and locking, shared across `:synk` and metastore implementations.
+- `:extension:kotlin-serialization`: Optional kotlinx-serialization bridge that supplies `MessageSerializer`, `MetaSerializer`, and related helpers so Synk payloads can be serialized/deserialized with the standard Kotlin serialization runtime.
+- `:metastores:delightful-metastore`: SQLDelight-based metadata store for persisting Synk's hybrid logical clock data. Bundles Android/iOS/JVM targets and exposes APIs to plug Synk into Delight-backed local databases.
+- `:plugins:ksp-adapter-codegen`: Kotlin Symbol Processing plugin that scans the annotations module and generates Synk adapter boilerplate via KotlinPoet. Used during application builds to derive strongly-typed adapters without hand-written wiring.
 
 ## Build, Test, and Development Commands
 - Build all: `./gradlew build` — compiles, runs checks across modules.

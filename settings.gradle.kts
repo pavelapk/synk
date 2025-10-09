@@ -42,6 +42,8 @@ dependencyResolutionManagement {
 include(":libs:annotations")
 include(":libs:concurrent-map")
 include(":synk")
+include(":sync-strategies:bloom-rateless")
+include(":sync-strategies:full-state")
 include(":extension:kotlin-serialization")
 include(":metastores:delightful-metastore")
 include(":plugins:ksp-adapter-codegen")

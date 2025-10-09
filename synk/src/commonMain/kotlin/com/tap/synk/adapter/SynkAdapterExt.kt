@@ -22,12 +22,12 @@ internal fun <T : Any> SynkAdapter<T>.diff(old: T, new: T): Set<String> {
     }
 }
 
-internal data class EncodedField(
+data class EncodedField(
     val name: String,
     val bytes: ByteArray,
 )
 
-internal fun <T : Any> SynkAdapter<T>.encodeToFields(crdt: T): List<EncodedField> {
+fun <T : Any> SynkAdapter<T>.encodeToFields(crdt: T): List<EncodedField> {
     val encoded = encode(crdt)
     return encoded.entries
         .sortedBy { it.key }
@@ -39,12 +39,12 @@ internal fun <T : Any> SynkAdapter<T>.encodeToFields(crdt: T): List<EncodedField
         }
 }
 
-internal fun <T : Any> SynkAdapter<T>.encodeSnapshot(crdt: T): ByteArray {
+fun <T : Any> SynkAdapter<T>.encodeSnapshot(crdt: T): ByteArray {
     val encoded = encode(crdt).encodeAsJsonObject().toString()
     return encoded.encodeToByteArray()
 }
 
-internal fun <T : Any> SynkAdapter<T>.decodeSnapshot(bytes: ByteArray): T {
+fun <T : Any> SynkAdapter<T>.decodeSnapshot(bytes: ByteArray): T {
     val json = bytes.decodeToString()
     val map = json.decodeToJsonObject().decodeToMap()
     return decode(map)
