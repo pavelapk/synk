@@ -1,16 +1,15 @@
 package com.tap.synk.strategy.bloomrateless
 
 import com.tap.synk.sync.SyncTransferEvent
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.coroutines.coroutineContext
 
 class ConflictSyncResponder<T : Any>(
     private val fpr: Double,
@@ -130,7 +129,7 @@ class ConflictSyncResponder<T : Any>(
                     inboundEnvelopes += envelope
                     when (envelope) {
                         is TransportEnvelope.Snapshot -> {
-                            downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf().toLong() }
+                            downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf() }
                             downloadStateBytes += envelope.payload.encodedObject.size.toLong()
                             local.applySnapshot(envelope.payload)
                             ConflictSyncLogger.log(role) {
@@ -138,7 +137,7 @@ class ConflictSyncResponder<T : Any>(
                             }
                         }
                         is TransportEnvelope.Field -> {
-                            downloadStateBytes += envelope.payload.field.sizeOf().toLong()
+                            downloadStateBytes += envelope.payload.field.sizeOf()
                             local.join(listOf(envelope.payload.field))
                             ConflictSyncLogger.log(role) {
                                 "apply field=${envelope.payload.field.field} object=${envelope.payload.field.objectKey.id}"
@@ -153,7 +152,7 @@ class ConflictSyncResponder<T : Any>(
                             if (responseFields.isNotEmpty()) {
                                 val response = TransportEnvelope.HashResponse(responseFields)
                                 outboundEnvelopes += response
-                                uploadStateBytes += response.fields.sumOf { it.sizeOf().toLong() }
+                                uploadStateBytes += response.fields.sumOf { it.sizeOf() }
                                 outboundChannel.send(response)
                                 ConflictSyncLogger.log(role) {
                                     "send hash response fields=${response.fields.size}"
@@ -161,7 +160,7 @@ class ConflictSyncResponder<T : Any>(
                             }
                         }
                         is TransportEnvelope.HashResponse -> {
-                            downloadStateBytes += envelope.fields.sumOf { it.sizeOf().toLong() }
+                            downloadStateBytes += envelope.fields.sumOf { it.sizeOf() }
                             local.join(envelope.fields)
                             ConflictSyncLogger.log(role) {
                                 "apply hash response fields=${envelope.fields.size}"

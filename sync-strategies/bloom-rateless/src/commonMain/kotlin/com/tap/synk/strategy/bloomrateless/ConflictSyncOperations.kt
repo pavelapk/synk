@@ -33,7 +33,7 @@ internal fun hashDecompositions(
 }
 
 internal fun totalStateBytes(decompositions: Collection<FieldDecomposition>): Long =
-    decompositions.sumOf { it.sizeOf().toLong() }
+    decompositions.sumOf { it.sizeOf() }
 
 internal suspend fun <T : Any> buildOutboundPlan(
     replica: ReplicaState<T>,
@@ -51,7 +51,7 @@ internal suspend fun <T : Any> buildOutboundPlan(
         if (snapshot != null) {
             envelopes += TransportEnvelope.Snapshot(snapshot)
             stateBytes += snapshot.encodedObject.size.toLong()
-            stateBytes += snapshot.fields.sumOf { it.sizeOf().toLong() }
+            stateBytes += snapshot.fields.sumOf { it.sizeOf() }
         } else {
             fields.forEach { field ->
                 envelopes += TransportEnvelope.Field(
@@ -60,7 +60,7 @@ internal suspend fun <T : Any> buildOutboundPlan(
                         field = field,
                     ),
                 )
-                stateBytes += field.sizeOf().toLong()
+                stateBytes += field.sizeOf()
             }
         }
     }
@@ -72,7 +72,7 @@ internal suspend fun <T : Any> buildOutboundPlan(
                 field = field,
             ),
         )
-        stateBytes += field.sizeOf().toLong()
+        stateBytes += field.sizeOf()
     }
 
     if (hashRequests.isNotEmpty()) {

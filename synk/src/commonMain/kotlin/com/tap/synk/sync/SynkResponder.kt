@@ -1,11 +1,10 @@
 package com.tap.synk.sync
 
 import com.tap.synk.Synk
+import kotlin.jvm.JvmName
 import kotlin.reflect.KClass
 import kotlinx.coroutines.CancellationException
-import kotlin.jvm.JvmName
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 
 data class SyncResponderSession(

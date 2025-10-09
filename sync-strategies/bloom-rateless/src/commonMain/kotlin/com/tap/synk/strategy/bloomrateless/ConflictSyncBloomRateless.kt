@@ -1,15 +1,14 @@
 package com.tap.synk.strategy.bloomrateless
 
 import com.tap.synk.sync.SyncTransferEvent
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.isActive
-import kotlin.coroutines.coroutineContext
 
 class ConflictSyncBloomRateless<T : Any>(
     private val fpr: Double,
@@ -112,14 +111,14 @@ class ConflictSyncBloomRateless<T : Any>(
                 inboundEnvelopes += envelope
                 when (envelope) {
                     is TransportEnvelope.Field -> {
-                        downloadStateBytes += envelope.payload.field.sizeOf().toLong()
+                        downloadStateBytes += envelope.payload.field.sizeOf()
                         local.join(listOf(envelope.payload.field))
                         ConflictSyncLogger.log(role) {
                             "apply field=${envelope.payload.field.field} object=${envelope.payload.field.objectKey.id}"
                         }
                     }
                     is TransportEnvelope.Snapshot -> {
-                        downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf().toLong() }
+                        downloadStateBytes += envelope.payload.fields.sumOf { it.sizeOf() }
                         downloadStateBytes += envelope.payload.encodedObject.size.toLong()
                         local.applySnapshot(envelope.payload)
                         ConflictSyncLogger.log(role) {
@@ -127,7 +126,7 @@ class ConflictSyncBloomRateless<T : Any>(
                         }
                     }
                     is TransportEnvelope.HashResponse -> {
-                        downloadStateBytes += envelope.fields.sumOf { it.sizeOf().toLong() }
+                        downloadStateBytes += envelope.fields.sumOf { it.sizeOf() }
                         local.join(envelope.fields)
                         ConflictSyncLogger.log(role) {
                             "apply hash response fields=${envelope.fields.size}"
