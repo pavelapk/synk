@@ -231,6 +231,15 @@ val stats = synk.sync(
 
 `sync` returns `SyncStats` so you can log how many objects were scanned, how much data crossed the wire, and how long each stage took.
 
+Responders that stay online can hand the library a stream of inbound sessions. Feed a `Flow<SyncTransport>` into `Synk.serveResponder` and it will keep creating responder runs as requests arrive:
+
+```kotlin
+synk.serveResponder(
+    namespace = Customer::class,
+    transports = backend.acceptSessions(), // Flow<SyncTransport>
+)
+```
+
 ### Built-in strategies
 
 Synk publishes multiple strategy modules under the `com.tap.synk.strategy` package so you can pick the right trade-offs for your transport:

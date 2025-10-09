@@ -137,6 +137,8 @@ The responder side listens on the same transport functions, builds its own `Repl
 
 Both sides share helper routines (`buildFilter`, `partition`, `ribltFrom`, `findAllDifferences`). The only difference is whether they start the session or answer it.
 
+Server-style responders can stay active and handle successive client sync sessions by feeding a `Flow<SyncTransport>` (or `Flow<SyncResponderSession>`) into `Synk.serveResponder`. The helper keeps creating responder sessions as new requests arrive, so callers can expose a long-lived endpoint instead of launching `Synk.sync` for every handshake.
+
 ### Transport contract (Flow transformers)
 
 The Rust reference runs both replicas inside one process; in Synk the peers live on different machines. We express the network as Flow transformers that implement the same three message channels used in the Rust code: the Bloom handshake, the rateless sketch, and the actual decompositions.

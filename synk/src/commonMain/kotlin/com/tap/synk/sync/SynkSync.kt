@@ -35,7 +35,7 @@ suspend inline fun <reified T : Any> Synk.sync(
     tracker: SyncTracker = defaultSyncTracker(),
 ): SyncStats = sync(T::class, role, transport, strategy, configuration, tracker)
 
-private fun <T : Any> Synk.buildSyncContext(namespace: KClass<T>): SyncContext<T> {
+internal fun <T : Any> Synk.buildSyncContext(namespace: KClass<T>): SyncContext<T> {
     val namespaceName = namespace.qualifiedName
         ?: throw IllegalArgumentException("Namespace must have a qualified name")
 
