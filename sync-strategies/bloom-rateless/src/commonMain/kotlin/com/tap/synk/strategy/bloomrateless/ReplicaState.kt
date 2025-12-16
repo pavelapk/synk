@@ -119,7 +119,7 @@ class ReplicaState<T : Any> internal constructor(
             val collected = mutableListOf<FieldDecomposition>()
             var afterId: String? = null
             do {
-                val page = stateSource.scan(afterId, pageSize)
+                val page = stateSource.scanUpdatedSince(null, afterId, pageSize)
                 if (page.isEmpty()) {
                     break
                 }

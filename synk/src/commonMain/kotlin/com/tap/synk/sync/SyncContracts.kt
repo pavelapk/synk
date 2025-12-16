@@ -3,6 +3,7 @@ package com.tap.synk.sync
 import com.tap.synk.Synk
 import com.tap.synk.adapter.SynkAdapter
 import com.tap.synk.meta.store.MetaStore
+import kotlinx.datetime.Instant
 
 enum class SyncRole {
     INITIATOR,
@@ -32,7 +33,8 @@ interface SyncContext<T : Any> {
 }
 
 interface SyncStateSource<T : Any> {
-    suspend fun scan(afterId: String?, limit: Int): List<T>
+    suspend fun scanUpdatedSince(since: Instant?, afterId: String?, limit: Int): List<T>
+    suspend fun scan(afterId: String?, limit: Int): List<T> = scanUpdatedSince(null, afterId, limit)
     suspend fun load(id: String): T?
 }
 

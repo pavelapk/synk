@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -184,7 +186,7 @@ class ConflictSyncIntegrationTest {
         name: String,
     ): Synk {
         val stateSource = MapStateSource(backing)
-        val mergeHandler = SyncMergeHandler<ContactRecord> { value -> backing[value.id] = value }
+        val mergeHandler = SyncMergeHandler<ContactRecord> { value -> stateSource.upsert(value.id, value) }
         val storageConfig = CustomClockStorageConfiguration(
             filePath = "/$name".toPath(),
             fileSystem = FakeFileSystem(),
@@ -200,15 +202,32 @@ class ConflictSyncIntegrationTest {
     private class MapStateSource<T : Any>(
         private val backing: MutableMap<String, T>,
     ) : SyncStateSource<T> {
-        override suspend fun scan(afterId: String?, limit: Int): List<T> {
-            val sorted = backing.entries.sortedBy { it.key }
+        private val updatedAt = backing.keys.associateWith { Clock.System.now() }.toMutableMap()
+
+        override suspend fun scanUpdatedSince(since: Instant?, afterId: String?, limit: Int): List<T> {
+            val sorted = backing.entries
+                .filter { (id, _) -> isUpdatedSince(id, since) }
+                .sortedBy { it.key }
             val startIndex = afterId?.let { id ->
                 sorted.indexOfFirst { it.key == id }.takeIf { it >= 0 }?.plus(1) ?: 0
             } ?: 0
             return sorted.drop(startIndex).take(limit).map { it.value }
         }
 
+        override suspend fun scan(afterId: String?, limit: Int): List<T> = scanUpdatedSince(null, afterId, limit)
+
         override suspend fun load(id: String): T? = backing[id]
+
+        fun upsert(id: String, value: T, updated: Instant = Clock.System.now()) {
+            backing[id] = value
+            updatedAt[id] = updated
+        }
+
+        private fun isUpdatedSince(id: String, since: Instant?): Boolean {
+            since ?: return true
+            val updated = updatedAt[id] ?: return false
+            return updated >= since
+        }
     }
 
     private fun defaultTracker() = DefaultSyncTracker()
