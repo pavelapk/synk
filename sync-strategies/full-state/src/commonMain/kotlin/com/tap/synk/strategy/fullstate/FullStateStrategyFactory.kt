@@ -50,7 +50,7 @@ private class FullStateSession<T : Any>(
         val outboundFlow = flow {
             var afterId: String? = null
             do {
-                val page = context.stateSource.scan(afterId, configuration.pageSize)
+                val page = context.stateSource.scanUpdatedSince(null, afterId, configuration.pageSize)
                 if (page.isEmpty()) break
 
                 val messages = mutableListOf<String>()

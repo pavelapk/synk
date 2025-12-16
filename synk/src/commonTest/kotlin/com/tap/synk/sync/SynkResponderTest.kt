@@ -4,12 +4,14 @@ import com.tap.synk.CRDT
 import com.tap.synk.CRDTAdapter
 import com.tap.synk.Synk
 import com.tap.synk.config.CustomClockStorageConfiguration
-import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
 
@@ -106,14 +108,31 @@ private class RecordingSession<T : Any>(
 private class TestStateSource(
     private val backing: MutableMap<String, CRDT>,
 ) : SyncStateSource<CRDT> {
-    override suspend fun scan(afterId: String?, limit: Int): List<CRDT> {
-        val sorted = backing.keys.sorted()
+    private val updatedAt: MutableMap<String, Instant> =
+        backing.keys.associateWith { Clock.System.now() }.toMutableMap()
+
+    override suspend fun scanUpdatedSince(since: Instant?, afterId: String?, limit: Int): List<CRDT> {
+        val sorted = backing.entries
+            .filter { (id, _) -> isUpdatedSince(id, since) }
+            .sortedBy { it.key }
         val start = afterId?.let { key ->
-            val index = sorted.indexOf(key)
-            if (index >= 0) index + 1 else 0
+            sorted.indexOfFirst { it.key == key }.takeIf { it >= 0 }?.plus(1) ?: 0
         } ?: 0
-        return sorted.drop(start).take(limit).mapNotNull { backing[it] }
+        return sorted.drop(start).take(limit).mapNotNull { it.value }
     }
 
+    override suspend fun scan(afterId: String?, limit: Int): List<CRDT> = scanUpdatedSince(null, afterId, limit)
+
     override suspend fun load(id: String): CRDT? = backing[id]
+
+    fun upsert(id: String, value: CRDT, updated: Instant = Clock.System.now()) {
+        backing[id] = value
+        updatedAt[id] = updated
+    }
+
+    private fun isUpdatedSince(id: String, since: Instant?): Boolean {
+        since ?: return true
+        val updated = updatedAt[id] ?: return false
+        return updated >= since
+    }
 }
