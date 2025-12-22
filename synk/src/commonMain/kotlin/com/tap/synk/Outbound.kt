@@ -56,15 +56,20 @@ internal fun <T : Any> synkRecordChange(
     val newMetaMap = old?.let { previous ->
         val oldMetaMap = metaStore.getMeta(id) ?: throw Exception("Failed to find meta for provided old value")
         val diff = synkAdapter.diff(previous, new)
+        val allKeys = HashSet<String>().apply {
+            addAll(oldMetaMap.keys)
+            addAll(diff)
+        }
+        val currentHlc = hlc.value.toString()
 
         val updated = HashMap<String, String>()
-        oldMetaMap.entries.forEach { entry ->
-            val value = if (diff.contains(entry.key)) {
-                hlc.value.toString()
+        allKeys.forEach { key ->
+            val value = if (diff.contains(key)) {
+                currentHlc
             } else {
-                entry.value
+                oldMetaMap[key] ?: currentHlc
             }
-            updated[entry.key] = value
+            updated[key] = value
         }
         updated
     } ?: meta(new, synkAdapter, hlc.value).timestampMeta
@@ -84,4 +89,3 @@ internal fun <T : Any> synkCreateMessage(
     val meta = Meta(crdt::class.qualifiedName!!, metaMap)
     return Message(crdt, meta)
 }
-
