@@ -65,7 +65,11 @@ class SynkBuilderTest {
 
         assertEquals(factory, synk.factory)
         assertEquals(adapter, synk.synkAdapterStore.resolve(SealedTest::class) as SealedTestAdapter)
-        assertEquals(adapter, synk.synkAdapterStore.resolve(SealedTest.Test1::class) as SealedTestAdapter)
-        assertEquals(adapter, synk.synkAdapterStore.resolve(SealedTest.Test2::class) as SealedTestAdapter)
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            synk.synkAdapterStore.resolve(SealedTest.Test1::class)
+        }
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            synk.synkAdapterStore.resolve(SealedTest.Test2::class)
+        }
     }
 }
